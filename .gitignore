@@ -3,6 +3,7 @@
 /dist
 /.wrangler
 .env*.local
+.dev.vars
 .DS_Store
 npm-debug.log*
 yarn-debug.log*

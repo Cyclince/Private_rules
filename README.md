@@ -102,8 +102,11 @@ https://你的-worker.你的-workers-dev-子域.workers.dev/admin/login
 
 ```bash
 pnpm install
+cp .dev.vars.example .dev.vars
 pnpm dev
 ```
+
+然后访问 `http://localhost:5173/admin/login`。在 `.dev.vars` 中自行修改本地登录密码和密钥；该文件已被 Git 忽略，不会上传到 GitHub。
 
 ## 安全说明
 

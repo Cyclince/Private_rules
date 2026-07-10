@@ -1,0 +1,4 @@
+# 复制为 .dev.vars 后再填写真实值；不要提交 .dev.vars。
+ADMIN_PASSWORD=dev-password
+SESSION_SECRET=replace-with-a-long-random-local-secret
+RULE_TOKEN=local-rule-token

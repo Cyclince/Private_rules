@@ -32,6 +32,15 @@ function withLinks(c: AppContext, data: Awaited<ReturnType<typeof getRulesData>>
   return { data, links: linksByCategory(data, c.req.url) };
 }
 
+function adminApp(c: AppContext) {
+  const url = new URL(c.req.url);
+  // Assets canonicalises /index.html to /. Fetching / directly avoids a
+  // redirect back into the application's authenticated root route.
+  url.pathname = '/';
+  url.search = '';
+  return c.env.ASSETS.fetch(new Request(url, c.req.raw));
+}
+
 app.onError((err) => {
   console.error(err);
   return error(err.message || '服务器处理失败。', 500);
@@ -162,10 +171,10 @@ app.get('/', async (c) => {
 
 app.get('/admin', async (c) => {
   if (!(await isAuthenticated(c))) return c.redirect('/admin/login');
-  return c.env.ASSETS.fetch(c.req.raw);
+  return adminApp(c);
 });
 
-app.get('/admin/login', async (c) => c.env.ASSETS.fetch(c.req.raw));
+app.get('/admin/login', (c) => adminApp(c));
 app.get('*', async (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default app;
