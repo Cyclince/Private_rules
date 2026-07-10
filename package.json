@@ -2,6 +2,7 @@
   "name": "private-rules-worker",
   "version": "2.0.0",
   "private": true,
+  "packageManager": "pnpm@10.11.1",
   "type": "module",
   "description": "Cloudflare Workers + D1 private rule subscription manager.",
   "scripts": {
