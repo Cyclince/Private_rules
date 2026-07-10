@@ -72,6 +72,16 @@ https://你的-worker.你的-workers-dev-子域.workers.dev/admin/login
 
 使用 `ADMIN_PASSWORD` 登录。首次打开稍等片刻，进入“设置”后确认 D1 显示“已连接”；然后即可创建分类、添加规则并在“链接”页复制订阅地址。
 
+### 第 5 步：修改自定义域名
+
+以 `rules.example.com` 为例：
+
+1. 确认 `example.com` 已添加到当前 Cloudflare 账号，且状态为“有效”。
+2. 打开 **Workers & Pages → private-rules-worker → Settings → Domains & Routes**。
+3. 点击 **Add → Custom Domain**，填写 `rules.example.com`，然后确认。
+4. 等待 Cloudflare 自动创建 DNS 记录和 HTTPS 证书；状态变为“Active”后即可访问 `https://rules.example.com`。
+5. 登录后台，打开“设置”，将 `baseUrl` 填为 `https://rules.example.com` 并保存。之后生成的订阅链接会自动使用新域名。
+
 ### 更新方式
 
 以后在 GitHub 修改 Fork 后的仓库并提交到 `main`，Cloudflare 会自动重新构建和发布，不需要重复配置密钥或数据库。
