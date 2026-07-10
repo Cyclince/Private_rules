@@ -1,0 +1,32 @@
+{
+  "name": "private-rules-worker",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Workers + D1 private rule subscription manager.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply private-rules-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply private-rules-db --remote"
+  },
+  "dependencies": {
+    "@cloudflare/vite-plugin": "^1.11.6",
+    "hono": "^4.8.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260708.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.5",
+    "wrangler": "^4.24.0"
+  }
+}

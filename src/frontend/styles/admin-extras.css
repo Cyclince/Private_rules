@@ -1,0 +1,45 @@
+.helper-text {
+  color: var(--muted);
+  margin: -4px 0 0;
+}
+
+.import-preview-list {
+  display: grid;
+  gap: 8px;
+}
+
+.preview-row,
+.check-row,
+.status-list {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.preview-row {
+  border-top: 1px solid var(--border);
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.preview-row span {
+  overflow-wrap: anywhere;
+}
+
+.preview-row strong,
+.preview-row em {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.check-row {
+  min-height: 44px;
+}
+
+.status-list {
+  align-items: flex-start;
+  color: var(--muted);
+  flex-direction: column;
+  margin-bottom: 14px;
+}

@@ -1,0 +1,8 @@
+@import './globals.css';
+@import './admin.css';
+@import './admin-interactions.css';
+@import './admin-extras.css';
+
+#root {
+  min-height: 100vh;
+}
