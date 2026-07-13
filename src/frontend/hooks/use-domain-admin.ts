@@ -14,22 +14,30 @@ export function useDomainAdmin() {
     d1Ready: false,
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [response, meResponse] = await Promise.all([fetch('/api/categories'), fetch('/api/auth/me')]);
-    if (!response.ok) {
-      window.location.href = '/admin/login';
-      return;
+    try {
+      const [response, meResponse] = await Promise.all([fetch('/api/categories'), fetch('/api/auth/me')]);
+      if (response.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
+      if (!response.ok) throw new Error('无法加载域名数据，请检查 D1 数据库绑定。');
+      const payload = (await response.json()) as { data: RulesData; links: LinksByCategory };
+      setData(payload.data);
+      setLinks(payload.links);
+      if (meResponse.ok) {
+        const me = (await meResponse.json()) as typeof meta;
+        setMeta(me);
+      }
+      setError('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '加载失败。');
+    } finally {
+      setLoading(false);
     }
-    const payload = (await response.json()) as { data: RulesData; links: LinksByCategory };
-    setData(payload.data);
-    setLinks(payload.links);
-    if (meResponse.ok) {
-      const me = (await meResponse.json()) as typeof meta;
-      setMeta(me);
-    }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -44,7 +52,9 @@ export function useDomainAdmin() {
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error ?? '操作失败。');
+        const message = payload.error ?? '操作失败。';
+        setError(message);
+        throw new Error(message);
       }
       await refresh();
       return response;
@@ -56,6 +66,8 @@ export function useDomainAdmin() {
     data,
     links,
     loading,
+    error,
+    clearError: () => setError(''),
     meta,
     refresh,
     createCategory: (input: { name: string; icon?: string; description?: string }) =>

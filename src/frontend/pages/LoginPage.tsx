@@ -28,7 +28,7 @@ export function LoginPage() {
       <form className="login-card" onSubmit={submit}>
         <span className="eyebrow">Private Rules</span>
         <h1>登录后台</h1>
-        <p>输入服务端配置的后台密码。密码只在 Worker 内校验，不会暴露到前端。</p>
+        <p>请输入服务端配置的后台密码</p>
         <input
           autoComplete="current-password"
           autoFocus

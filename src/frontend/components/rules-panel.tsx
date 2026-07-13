@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { DomainRuleType, ImportPreview, RuleCategory } from '../../types/domain-rules';
 import { FRIENDLY_RULE_TYPES, getFriendlyRuleDescription, getFriendlyRuleType } from '../../lib/rule-types';
 import type { useDomainAdmin } from '../hooks/use-domain-admin';
+import { copyText } from '../lib/clipboard';
 
 const ADVANCED_TYPES = FRIENDLY_RULE_TYPES;
 
@@ -138,7 +139,14 @@ export function RulesPanel({
           <input className="app-input compact" placeholder="搜索" value={query} onChange={(event) => setQuery(event.target.value)} />
         </div>
         <div className="card-actions">
-          <button onClick={() => navigator.clipboard.writeText(category.rules.map((rule) => rule.value).sort().join('\n')).then(() => onToast('已复制导出内容'))}>
+          <button onClick={async () => {
+            try {
+              await copyText(category.rules.map((rule) => rule.value).sort().join('\n'));
+              onToast('已复制导出内容');
+            } catch (error) {
+              onToast(error instanceof Error ? error.message : '复制失败，请手动复制。');
+            }
+          }}>
             批量导出
           </button>
           <button onClick={() => onToast('系统保存时会自动去重')}>去重</button>

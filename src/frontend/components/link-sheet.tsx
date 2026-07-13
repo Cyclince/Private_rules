@@ -1,5 +1,6 @@
 import type { ClientLink } from '../../types/domain-rules';
 import { useState } from 'react';
+import { copyText } from '../lib/clipboard';
 
 export function LinkSheet({
   links,
@@ -13,9 +14,17 @@ export function LinkSheet({
   const [preview, setPreview] = useState<{ title: string; content: string } | null>(null);
 
   async function copy(url: string) {
-    await navigator.clipboard.writeText(url);
-    onToast('链接已复制');
-    onClose();
+    if (!url) {
+      onToast('当前未启用可用的订阅链接，请检查设置和 RULE_TOKEN。');
+      return;
+    }
+    try {
+      await copyText(url);
+      onToast('链接已复制');
+      onClose();
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : '复制失败，请手动复制。');
+    }
   }
 
   async function showPreview(link: ClientLink) {
@@ -42,7 +51,7 @@ export function LinkSheet({
                 {!link.supported && <span>即将支持，当前复制通用链接</span>}
               </div>
               <div className="client-actions">
-                <button className="primary-action" onClick={() => copy(link.recommendedUrl)}>复制</button>
+                <button className="primary-action" disabled={!link.recommendedUrl} onClick={() => copy(link.recommendedUrl)}>复制</button>
                 <button onClick={() => showPreview(link)}>预览</button>
               </div>
             </div>

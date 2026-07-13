@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { RulesData } from '../../types/domain-rules';
 import type { useDomainAdmin } from '../hooks/use-domain-admin';
+import { copyText } from '../lib/clipboard';
 
 export function SettingsPanel({
   api,
@@ -32,8 +33,12 @@ export function SettingsPanel({
   }
 
   async function exportData() {
-    await navigator.clipboard.writeText(await api.exportData());
-    onToast('备份数据已复制');
+    try {
+      await copyText(await api.exportData());
+      onToast('备份数据已复制');
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : '复制失败，请手动复制。');
+    }
   }
 
   async function importData() {

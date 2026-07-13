@@ -25,23 +25,28 @@ function siteBase(requestUrl: string, data: RulesData) {
   return data.settings.baseUrl.trim().replace(/\/+$/, '') || new URL(requestUrl).origin;
 }
 
-export function linksForCategory(category: RuleCategory, data: RulesData, requestUrl: string): ClientLink[] {
+export function linksForCategory(category: RuleCategory, data: RulesData, requestUrl: string, ruleToken?: string): ClientLink[] {
   const base = siteBase(requestUrl, data);
   return clients.map((client) => {
     const fileName = fileNameForClient(category, client.id as ClientId);
     const publicUrl = `${base}/rules/${fileName}`;
-    const tokenUrl = `${base}/sub/<RULE_TOKEN>/${fileName}`;
+    const tokenUrl = ruleToken ? `${base}/sub/${encodeURIComponent(ruleToken)}/${fileName}` : '';
+    const recommendedUrl = data.settings.tokenLinksEnabled && tokenUrl
+      ? tokenUrl
+      : data.settings.publicLinksEnabled
+        ? publicUrl
+        : '';
     return {
       ...client,
       fileName,
       publicUrl,
       tokenUrl,
-      recommendedUrl: data.settings.tokenLinksEnabled ? tokenUrl : publicUrl,
+      recommendedUrl,
       supported: true,
     };
   });
 }
 
-export function linksByCategory(data: RulesData, requestUrl: string) {
-  return Object.fromEntries(data.categories.map((category) => [category.id, linksForCategory(category, data, requestUrl)]));
+export function linksByCategory(data: RulesData, requestUrl: string, ruleToken?: string) {
+  return Object.fromEntries(data.categories.map((category) => [category.id, linksForCategory(category, data, requestUrl, ruleToken)]));
 }

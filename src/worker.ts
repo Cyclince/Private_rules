@@ -29,7 +29,7 @@ app.use('*', async (c, next) => {
 });
 
 function withLinks(c: AppContext, data: Awaited<ReturnType<typeof getRulesData>>) {
-  return { data, links: linksByCategory(data, c.req.url) };
+  return { data, links: linksByCategory(data, c.req.url, c.env.RULE_TOKEN) };
 }
 
 function adminApp(c: AppContext) {
@@ -133,7 +133,7 @@ app.patch('/api/settings', requireAuth, async (c) => {
 
 app.get('/api/links', requireAuth, async (c) => {
   const data = await getRulesData(c.env);
-  return json({ links: linksByCategory(data, c.req.url) });
+  return json({ links: linksByCategory(data, c.req.url, c.env.RULE_TOKEN) });
 });
 
 app.get('/api/data', requireAuth, async (c) => json(await getRulesData(c.env)));

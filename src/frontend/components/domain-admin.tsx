@@ -55,6 +55,23 @@ export function DomainAdmin() {
     return () => media.removeEventListener('change', applyTheme);
   }, [theme]);
 
+  useEffect(() => {
+    if (!api.error) return;
+    showToast(api.error);
+    api.clearError();
+  }, [api.error]);
+
+  async function createFirstCategory() {
+    const name = window.prompt('分类名称，例如 YouTube');
+    if (!name?.trim()) return;
+    try {
+      await api.createCategory({ name });
+      showToast('分类已创建');
+    } catch {
+      // useDomainAdmin displays the server error in the global toast.
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="desktop-sidebar">
@@ -84,6 +101,13 @@ export function DomainAdmin() {
                 onSelectCategory={setSelectedId}
                 onToast={showToast}
               />
+            )}
+            {view === 'rules' && !selectedCategory && (
+              <section className="soft-card input-panel">
+                <h1>还没有域名分类</h1>
+                <p>先创建一个分类，然后即可添加、导入和维护域名规则。</p>
+                <button className="primary-action" onClick={createFirstCategory}>新建分类</button>
+              </section>
             )}
             {view === 'links' && <LinksPanel data={api.data} links={api.links} onToast={showToast} />}
             {view === 'settings' && (
