@@ -156,9 +156,7 @@ pnpm db:migrate:remote
 
 <div align="center">
 
-[![GitHub Stars](https://img.shields.io/github/stars/Cyclince/Private_rules?style=for-the-badge&logo=github&label=GitHub%20Stars)](https://www.star-history.com/Cyclince/Private_rules)
-
-点击徽章可在 Star History 查看历史趋势；当前 Star History 页面需要仓库所有者的 GitHub Token 才能读取时间线。
+[![Star History Chart](https://api.star-history.com/svg?repos=Cyclince%2FPrivate_rules&type=Date)](https://www.star-history.com/#Cyclince/Private_rules&Date)
 
 </div>
 

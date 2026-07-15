@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ClientLink, DomainRule, DomainRuleType, GeoSourceSuggestion, ImportPreview, RulesData } from '../../types/domain-rules';
 
 type LinksByCategory = Record<string, ClientLink[]>;
+export type ApiKeySummary = { id: string; note: string; keyPrefix: string; createdAt: string; lastUsedAt?: string };
 
 const demoCategories = ['AI', 'Apple', 'Google', 'YouTube', 'GitHub', 'Cloudflare'].map((name, categoryIndex) => ({
   id: name.toLowerCase(), name, slug: name, icon: name.slice(0, 2).toUpperCase(),
@@ -35,11 +36,12 @@ export function useDomainAdmin() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [apiKeys, setApiKeys] = useState<ApiKeySummary[]>([]);
 
   const refresh = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [response, meResponse] = await Promise.all([fetch('/api/categories'), fetch('/api/auth/me')]);
+      const [response, meResponse, apiKeysResponse] = await Promise.all([fetch('/api/categories'), fetch('/api/auth/me'), fetch('/api/api-keys')]);
       if (response.status === 401) {
         window.location.href = '/admin/login';
         return;
@@ -58,6 +60,7 @@ export function useDomainAdmin() {
         const me = (await meResponse.json()) as typeof meta;
         setMeta(me);
       }
+      if (apiKeysResponse.ok) setApiKeys(((await apiKeysResponse.json()) as { keys?: ApiKeySummary[] }).keys ?? []);
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '加载失败');
@@ -95,6 +98,7 @@ export function useDomainAdmin() {
     error,
     clearError: () => setError(''),
     meta,
+    apiKeys,
     refresh,
     createCategory: (input: { name: string; icon?: string; description?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; syncIntervalMinutes?: number; tokenLinksEnabled?: boolean; publicLinksEnabled?: boolean }) =>
       mutate('/api/categories', { method: 'POST', body: JSON.stringify(input) }),
@@ -116,6 +120,8 @@ export function useDomainAdmin() {
       mutate(`/api/categories/${categoryId}/rules/${rule.id}`, { method: 'PATCH', body: JSON.stringify(rule) }),
     deleteRule: (categoryId: string, ruleId: string) =>
       mutate(`/api/categories/${categoryId}/rules/${ruleId}`, { method: 'DELETE' }),
+    batchRules: (categoryId: string, ruleIds: string[], action: 'enable' | 'disable' | 'delete') =>
+      mutate(`/api/categories/${categoryId}/rules/batch`, { method: 'POST', body: JSON.stringify({ ruleIds, action }) }),
     importPreview: async (categoryId: string, text: string) => {
       const response = await fetch(`/api/categories/${categoryId}/rules/bulk-import`, {
         method: 'POST',
@@ -135,13 +141,14 @@ export function useDomainAdmin() {
       return JSON.stringify(await response.json());
     },
     importData: (json: string) => mutate('/api/data', { method: 'PUT', body: json }),
-    createApiKey: async () => {
-      const response = await fetch('/api/api-key', { method: 'POST' });
-      const payload = (await response.json().catch(() => ({}))) as { apiKey?: string; createdAt?: string; error?: string };
+    createApiKey: async (note: string) => {
+      const response = await fetch('/api/api-keys', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ note }) });
+      const payload = (await response.json().catch(() => ({}))) as { id?: string; apiKey?: string; note?: string; keyPrefix?: string; createdAt?: string; error?: string };
       if (!response.ok || !payload.apiKey) throw new Error(payload.error ?? 'API Key 生成失败');
       await refresh(true);
-      return { apiKey: payload.apiKey, createdAt: payload.createdAt };
+      return payload;
     },
-    deleteApiKey: () => mutate('/api/api-key', { method: 'DELETE' }),
+    deleteApiKey: (keyId: string) => mutate(`/api/api-keys/${keyId}`, { method: 'DELETE' }),
+    updateApiKeyNote: (keyId: string, note: string) => mutate(`/api/api-keys/${keyId}`, { method: 'PATCH', body: JSON.stringify({ note }) }),
   };
 }

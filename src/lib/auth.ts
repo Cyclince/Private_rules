@@ -35,42 +35,45 @@ function randomApiKey() {
   return `prk_${token}`;
 }
 
-async function storedSetting(env: Env, key: string) {
-  const row = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first<{ value: string | null }>();
-  return row?.value ?? '';
-}
-
 export async function apiKeyConfigured(env: Env) {
-  return Boolean(await storedSetting(env, 'apiKeyHash'));
+  return Boolean(await env.DB.prepare('SELECT id FROM api_keys LIMIT 1').first());
 }
 
-export async function createApiKey(env: Env) {
+export async function createApiKey(env: Env, note = '') {
   const apiKey = randomApiKey();
+  const keyId = id('key');
   const createdAt = new Date().toISOString();
-  await env.DB.batch([
-    env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind('apiKeyHash', await sha256(apiKey)),
-    env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind('apiKeyCreatedAt', createdAt),
-  ]);
-  return { apiKey, createdAt };
+  const cleanNote = note.trim().slice(0, 80);
+  await env.DB.prepare('INSERT INTO api_keys (id, note, key_hash, key_prefix, created_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(keyId, cleanNote, await sha256(apiKey), `${apiKey.slice(0, 12)}…`, createdAt).run();
+  return { id: keyId, apiKey, note: cleanNote, keyPrefix: `${apiKey.slice(0, 12)}…`, createdAt };
 }
 
-export async function deleteApiKey(env: Env) {
-  await env.DB.batch([
-    env.DB.prepare('DELETE FROM settings WHERE key = ?').bind('apiKeyHash'),
-    env.DB.prepare('DELETE FROM settings WHERE key = ?').bind('apiKeyCreatedAt'),
-  ]);
+export async function deleteApiKey(env: Env, keyId: string) {
+  await env.DB.prepare('DELETE FROM api_keys WHERE id = ?').bind(keyId).run();
+}
+
+export async function updateApiKeyNote(env: Env, keyId: string, note: string) {
+  await env.DB.prepare('UPDATE api_keys SET note = ? WHERE id = ?').bind(note.trim().slice(0, 80), keyId).run();
 }
 
 export async function apiKeyStatus(env: Env) {
-  return { configured: await apiKeyConfigured(env), createdAt: (await storedSetting(env, 'apiKeyCreatedAt')) || undefined };
+  const rows = await env.DB.prepare('SELECT id, note, key_prefix, created_at, last_used_at FROM api_keys ORDER BY created_at DESC')
+    .all<{ id: string; note: string; key_prefix: string; created_at: string; last_used_at: string | null }>();
+  return { keys: (rows.results ?? []).map((row) => ({
+    id: row.id, note: row.note, keyPrefix: row.key_prefix, createdAt: row.created_at, lastUsedAt: row.last_used_at ?? undefined,
+  })) };
 }
 
 async function validApiKey(c: Context<{ Bindings: Env; Variables: AppVariables }>) {
   const authorization = c.req.header('authorization') ?? '';
   const match = authorization.match(/^Bearer\s+(prk_[A-Za-z0-9_-]+)$/i);
   if (!match) return false;
-  const expected = await storedSetting(c.env, 'apiKeyHash');
-  return Boolean(expected) && (await sha256(match[1])) === expected;
+  const hash = await sha256(match[1]);
+  const row = await c.env.DB.prepare('SELECT id FROM api_keys WHERE key_hash = ?').bind(hash).first<{ id: string }>();
+  if (!row) return false;
+  await c.env.DB.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?').bind(new Date().toISOString(), row.id).run();
+  return true;
 }
 
 export async function createSession(c: Context<{ Bindings: Env; Variables: AppVariables }>) {

@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import type { AppVariables, Env } from './types';
-import { apiKeyConfigured, apiKeyStatus, authConfigured, checkPassword, createApiKey, createSession, deleteApiKey, destroySession, isAuthenticated, requireAuth, requireSessionAuth, safeFileName, tokenMatches } from './lib/auth';
+import { apiKeyConfigured, apiKeyStatus, authConfigured, checkPassword, createApiKey, createSession, deleteApiKey, destroySession, isAuthenticated, requireAuth, requireSessionAuth, safeFileName, tokenMatches, updateApiKeyNote } from './lib/auth';
 import {
   addRule,
+  batchUpdateRules,
   createCategory,
   deleteCategory,
   deleteRule,
@@ -107,13 +108,22 @@ app.get('/api', requireAuth, async (c) => json({
   },
 }));
 
-app.get('/api/api-key', requireSessionAuth, async (c) => json(await apiKeyStatus(c.env)));
+app.get('/api/api-keys', requireSessionAuth, async (c) => json(await apiKeyStatus(c.env)));
 
-app.post('/api/api-key', requireSessionAuth, async (c) => json(await createApiKey(c.env), { status: 201 }));
+app.post('/api/api-keys', requireSessionAuth, async (c) => {
+  const body = await c.req.json<{ note?: string }>().catch(() => ({})) as { note?: string };
+  return json(await createApiKey(c.env, body.note ?? ''), { status: 201 });
+});
 
-app.delete('/api/api-key', requireSessionAuth, async (c) => {
-  await deleteApiKey(c.env);
-  return json({ configured: false });
+app.delete('/api/api-keys/:keyId', requireSessionAuth, async (c) => {
+  await deleteApiKey(c.env, c.req.param('keyId'));
+  return json({ deleted: true });
+});
+
+app.patch('/api/api-keys/:keyId', requireSessionAuth, async (c) => {
+  const body = await c.req.json<{ note?: string }>().catch(() => ({})) as { note?: string };
+  await updateApiKeyNote(c.env, c.req.param('keyId'), body.note ?? '');
+  return json({ updated: true });
 });
 
 app.get('/api/categories', requireAuth, async (c) => json(withLinks(c, await getRulesData(c.env))));
@@ -153,6 +163,13 @@ app.patch('/api/categories/:id/rules/:ruleId', requireAuth, async (c) => {
 
 app.delete('/api/categories/:id/rules/:ruleId', requireAuth, async (c) => {
   const data = await deleteRule(c.env, c.req.param('id'), c.req.param('ruleId'));
+  return json(withLinks(c, data));
+});
+
+app.post('/api/categories/:id/rules/batch', requireAuth, async (c) => {
+  const body = await c.req.json<{ ruleIds?: string[]; action?: 'enable' | 'disable' | 'delete' }>().catch(() => ({})) as { ruleIds?: string[]; action?: 'enable' | 'disable' | 'delete' };
+  if (!body.action || !['enable', 'disable', 'delete'].includes(body.action)) return error('批量操作无效。', 400);
+  const data = await batchUpdateRules(c.env, c.req.param('id'), body.ruleIds ?? [], body.action);
   return json(withLinks(c, data));
 });
 

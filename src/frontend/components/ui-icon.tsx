@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export type IconName = 'home' | 'rules' | 'domain' | 'links' | 'settings' | 'info' | 'download' | 'upload' | 'database' | 'pulse' | 'clock' | 'chevron' | 'chevronRight' | 'arrowLeft' | 'more' | 'activity' | 'plus' | 'close' | 'check' | 'logout' | 'file' | 'copy' | 'search' | 'refresh' | 'restore' | 'sync' | 'trash' | 'edit' | 'key';
+export type IconName = 'home' | 'rules' | 'domain' | 'links' | 'settings' | 'info' | 'download' | 'upload' | 'database' | 'pulse' | 'clock' | 'chevron' | 'chevronRight' | 'arrowLeft' | 'more' | 'manage' | 'activity' | 'plus' | 'close' | 'check' | 'logout' | 'file' | 'copy' | 'search' | 'refresh' | 'restore' | 'sync' | 'trash' | 'edit' | 'key';
 
 const paths: Record<IconName, ReactNode> = {
   home: <><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></>,
@@ -18,6 +18,7 @@ const paths: Record<IconName, ReactNode> = {
   chevronRight: <path d="m9 18 6-6-6-6"/>,
   arrowLeft: <><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></>,
   more: <><circle cx="12" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"/></>,
+  manage: <><rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="m7.5 8 1.4 1.4L11.5 7M13.5 8.5h3M7.5 14l1.4 1.4 2.6-2.4M13.5 14.5h3"/></>,
   activity: <path d="M3 12h4l2-6 4 12 2-6h6"/>,
   plus: <path d="M12 5v14M5 12h14"/>,
   close: <><path d="M6 6l12 12M18 6 6 18"/></>,

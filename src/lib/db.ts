@@ -73,9 +73,14 @@ export function ensureDatabase(env: Env) {
     )`,
     'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)',
     'CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, expires_at TEXT NOT NULL, created_at TEXT NOT NULL)',
+    `CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY, note TEXT NOT NULL DEFAULT '', key_hash TEXT NOT NULL UNIQUE,
+      key_prefix TEXT NOT NULL, created_at TEXT NOT NULL, last_used_at TEXT
+    )`,
     'CREATE INDEX IF NOT EXISTS idx_rules_category_id ON rules(category_id)',
     'CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug)',
     'CREATE INDEX IF NOT EXISTS idx_rules_enabled ON rules(enabled)',
+    'CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash)',
     `CREATE TABLE IF NOT EXISTS category_sources (
       id TEXT PRIMARY KEY, category_id TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL,
       enabled INTEGER DEFAULT 1, last_synced_at TEXT, last_status TEXT DEFAULT 'pending',
@@ -90,6 +95,13 @@ export function ensureDatabase(env: Env) {
 
   databaseReady ??= (async () => {
     await env.DB.batch(statements.map((statement) => env.DB.prepare(statement)));
+    await env.DB.prepare(`INSERT OR IGNORE INTO api_keys (id, note, key_hash, key_prefix, created_at)
+      SELECT 'key_legacy', '迁移的 API Key', value, 'prk_legacy…', COALESCE((SELECT value FROM settings WHERE key = 'apiKeyCreatedAt'), ?)
+      FROM settings WHERE key = 'apiKeyHash' AND value <> ''`).bind(now()).run();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM settings WHERE key = 'apiKeyHash'"),
+      env.DB.prepare("DELETE FROM settings WHERE key = 'apiKeyCreatedAt'"),
+    ]);
     const [categoryColumns, ruleColumns, sourceColumns] = await Promise.all([
       env.DB.prepare('PRAGMA table_info(categories)').all<{ name: string }>(),
       env.DB.prepare('PRAGMA table_info(rules)').all<{ name: string }>(),
@@ -227,7 +239,7 @@ export async function getRulesData(env: Env): Promise<RulesData> {
     env.DB.prepare('SELECT * FROM rules ORDER BY sort_order ASC, created_at ASC').all<RuleRow>(),
     env.DB.prepare('SELECT * FROM category_sources ORDER BY created_at ASC').all<SourceRow>(),
     getSettings(env),
-    env.DB.prepare("SELECT value FROM settings WHERE key = 'apiKeyHash'").first<{ value: string | null }>(),
+    env.DB.prepare('SELECT id FROM api_keys LIMIT 1').first<{ id: string }>(),
   ]);
 
   const rulesByCategory = new Map<string, DomainRule[]>();
@@ -251,7 +263,7 @@ export async function getRulesData(env: Env): Promise<RulesData> {
       adminPasswordConfigured: Boolean(env.ADMIN_PASSWORD),
       ruleTokenConfigured: Boolean(env.RULE_TOKEN),
       sessionSecretConfigured: Boolean(env.SESSION_SECRET),
-      apiKeyConfigured: Boolean(apiKeyRow?.value),
+      apiKeyConfigured: Boolean(apiKeyRow?.id),
     },
     categories,
     updatedAt: updatedAt || now(),
@@ -401,6 +413,21 @@ export async function deleteRule(env: Env, categoryId: string, ruleId: string) {
   if (!current) throw new Error('规则不存在。');
   if (current.source_id) throw new Error('上游规则为只读，不能单独删除。');
   await env.DB.prepare('DELETE FROM rules WHERE id = ? AND category_id = ?').bind(ruleId, categoryId).run();
+  await touchCategory(env, categoryId);
+  return getRulesData(env);
+}
+
+export async function batchUpdateRules(env: Env, categoryId: string, ruleIds: string[], action: 'enable' | 'disable' | 'delete') {
+  const ids = [...new Set(ruleIds)].filter(Boolean).slice(0, 1000);
+  if (!ids.length) throw new Error('请选择至少一条规则。');
+  const placeholders = ids.map(() => '?').join(',');
+  if (action === 'delete') {
+    await env.DB.prepare(`DELETE FROM rules WHERE category_id = ? AND source_id IS NULL AND id IN (${placeholders})`)
+      .bind(categoryId, ...ids).run();
+  } else {
+    await env.DB.prepare(`UPDATE rules SET enabled = ?, updated_at = ? WHERE category_id = ? AND source_id IS NULL AND id IN (${placeholders})`)
+      .bind(action === 'enable' ? 1 : 0, now(), categoryId, ...ids).run();
+  }
   await touchCategory(env, categoryId);
   return getRulesData(env);
 }
