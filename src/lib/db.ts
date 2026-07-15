@@ -1,7 +1,7 @@
 import type { DomainRule, RuleCategory, RuleSettings, RuleSource, RulesData } from '../types/domain-rules';
 import type { Env } from '../types';
 import { parseRuleInput } from './parser';
-import { id, slugify } from './slug';
+import { id, slugify, validateCategoryName } from './slug';
 
 type CategoryRow = {
   id: string;
@@ -123,8 +123,20 @@ export function now() {
   return new Date().toISOString();
 }
 
+export function sourceNameFromUrl(value: string, fallback = '') {
+  try {
+    const url = new URL(value);
+    const [owner] = url.pathname.split('/').filter(Boolean);
+    if ((url.hostname === 'raw.githubusercontent.com' || url.hostname === 'github.com') && owner) return decodeURIComponent(owner);
+    return fallback || url.hostname;
+  } catch {
+    return fallback || value;
+  }
+}
+
 function sourceFromRow(row: SourceRow): RuleSource {
-  return { id: row.id, categoryId: row.category_id, name: row.name, url: row.url, enabled: row.enabled !== 0,
+  const name = (row.source_type ?? 'url') === 'url' ? sourceNameFromUrl(row.url, row.name) : row.name;
+  return { id: row.id, categoryId: row.category_id, name, url: row.url, enabled: row.enabled !== 0,
     lastSyncedAt: row.last_synced_at ?? undefined, lastStatus: row.last_status ?? 'pending',
     lastCount: row.last_count ?? 0, lastError: row.last_error ?? undefined, syncIntervalMinutes: row.sync_interval_minutes ?? 60,
     sourceType: row.source_type ?? 'url', geositeName: row.geosite_name ?? undefined, geoipName: row.geoip_name ?? undefined };
@@ -192,7 +204,15 @@ export async function getSettings(env: Env): Promise<RuleSettings> {
 }
 
 export async function saveSettings(env: Env, input: Partial<RuleSettings>) {
-  const next = { ...(await getSettings(env)), ...input };
+  const current = await getSettings(env);
+  const next: RuleSettings = {
+    baseUrl: input.baseUrl ?? current.baseUrl,
+    policyName: input.policyName ?? current.policyName,
+    publicLinksEnabled: input.publicLinksEnabled ?? current.publicLinksEnabled,
+    tokenLinksEnabled: input.tokenLinksEnabled ?? current.tokenLinksEnabled,
+    customIconPackUrls: input.customIconPackUrls ?? current.customIconPackUrls,
+    customIconPackNames: input.customIconPackNames ?? current.customIconPackNames,
+  };
   await env.DB.batch(
     Object.entries(next).map(([key, value]) =>
       env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(key, typeof value === 'object' ? JSON.stringify(value) : String(value)),
@@ -202,11 +222,12 @@ export async function saveSettings(env: Env, input: Partial<RuleSettings>) {
 }
 
 export async function getRulesData(env: Env): Promise<RulesData> {
-  const [categoryRows, ruleRows, sourceRows, settings] = await Promise.all([
+  const [categoryRows, ruleRows, sourceRows, settings, apiKeyRow] = await Promise.all([
     env.DB.prepare('SELECT * FROM categories ORDER BY sort_order ASC, created_at ASC').all<CategoryRow>(),
     env.DB.prepare('SELECT * FROM rules ORDER BY sort_order ASC, created_at ASC').all<RuleRow>(),
     env.DB.prepare('SELECT * FROM category_sources ORDER BY created_at ASC').all<SourceRow>(),
     getSettings(env),
+    env.DB.prepare("SELECT value FROM settings WHERE key = 'apiKeyHash'").first<{ value: string | null }>(),
   ]);
 
   const rulesByCategory = new Map<string, DomainRule[]>();
@@ -230,6 +251,7 @@ export async function getRulesData(env: Env): Promise<RulesData> {
       adminPasswordConfigured: Boolean(env.ADMIN_PASSWORD),
       ruleTokenConfigured: Boolean(env.RULE_TOKEN),
       sessionSecretConfigured: Boolean(env.SESSION_SECRET),
+      apiKeyConfigured: Boolean(apiKeyRow?.value),
     },
     categories,
     updatedAt: updatedAt || now(),
@@ -241,13 +263,15 @@ type CategoryInput = Partial<RuleCategory> & { sourceUrls?: string[]; geositeNam
 
 export async function createCategory(env: Env, input: CategoryInput) {
   const timestamp = now();
-  const name = input.name?.trim();
-  if (!name) throw new Error('请输入分类名称。');
+  const name = input.name?.trim() ?? '';
+  const nameError = validateCategoryName(name);
+  if (nameError) throw new Error(nameError);
   const categoryId = id('cat');
-  const slug = input.slug?.trim() || slugify(name);
+  const slug = slugify(input.slug?.trim() || name);
   const sortOrder = input.sortOrder ?? Date.now();
-  const tokenAccess = input.tokenLinksEnabled !== false;
-  const publicAccess = !tokenAccess && input.publicLinksEnabled === true;
+  const hasUpstream = Boolean(input.sourceUrls?.length || input.geositeNames?.length || input.geoipNames?.length);
+  const tokenAccess = input.tokenLinksEnabled ?? !hasUpstream;
+  const publicAccess = !tokenAccess && (input.publicLinksEnabled ?? hasUpstream);
 
   await env.DB.prepare(
     'INSERT INTO categories (id, name, slug, icon, description, note, sort_order, enabled, public_links_enabled, token_links_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -275,6 +299,8 @@ export async function updateCategory(env: Env, categoryId: string, input: Catego
   const current = await env.DB.prepare('SELECT * FROM categories WHERE id = ?').bind(categoryId).first<CategoryRow>();
   if (!current) throw new Error('分类不存在。');
   const name = input.name?.trim() || current.name;
+  const nameError = validateCategoryName(name);
+  if (nameError) throw new Error(nameError);
   const timestamp = now();
   let tokenAccess = input.tokenLinksEnabled === undefined ? current.token_links_enabled !== 0 : input.tokenLinksEnabled;
   let publicAccess = input.publicLinksEnabled === undefined ? current.public_links_enabled !== 0 : input.publicLinksEnabled;
@@ -284,7 +310,7 @@ export async function updateCategory(env: Env, categoryId: string, input: Catego
   )
     .bind(
       name,
-      input.slug?.trim() || current.slug,
+      (input.slug?.trim() || name !== current.name) ? slugify(input.slug?.trim() || name) : current.slug,
       input.icon ?? current.icon,
       input.description ?? current.description,
       input.note ?? current.note,
@@ -318,7 +344,7 @@ export async function replaceCategorySources(env: Env, categoryId: string, sourc
     ...removedSourceIds.map((sourceId) => env.DB.prepare('DELETE FROM rules WHERE source_id = ?').bind(sourceId)),
     ...urls.filter((url) => !existingByUrl.has(url)).map((url, index) => env.DB.prepare(
       "INSERT INTO category_sources (id, category_id, name, url, enabled, last_status, sync_interval_minutes, source_type, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, 'url', ?, ?)",
-    ).bind(id('src'), categoryId, new URL(url).hostname || `来源 ${index + 1}`, url, 'pending', syncIntervalMinutes, timestamp, timestamp)),
+    ).bind(id('src'), categoryId, sourceNameFromUrl(url, `来源 ${index + 1}`), url, 'pending', syncIntervalMinutes, timestamp, timestamp)),
     ...geosites.filter((name) => !existingByUrl.has(`https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/${encodeURIComponent(name)}`)).map((name) => env.DB.prepare(
       "INSERT INTO category_sources (id, category_id, name, url, enabled, last_status, sync_interval_minutes, source_type, geosite_name, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, 'geosite', ?, ?, ?)",
     ).bind(id('src'), categoryId, `GeoSite · ${name}`, `https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/${encodeURIComponent(name)}`, 'pending', syncIntervalMinutes, name, timestamp, timestamp)),

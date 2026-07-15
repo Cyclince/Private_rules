@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export type IconName = 'home' | 'rules' | 'domain' | 'links' | 'settings' | 'info' | 'download' | 'upload' | 'database' | 'pulse' | 'clock' | 'chevron' | 'chevronRight' | 'arrowLeft' | 'more' | 'activity' | 'plus' | 'close' | 'check' | 'logout' | 'file' | 'copy' | 'search' | 'refresh' | 'sync' | 'trash' | 'edit';
+export type IconName = 'home' | 'rules' | 'domain' | 'links' | 'settings' | 'info' | 'download' | 'upload' | 'database' | 'pulse' | 'clock' | 'chevron' | 'chevronRight' | 'arrowLeft' | 'more' | 'activity' | 'plus' | 'close' | 'check' | 'logout' | 'file' | 'copy' | 'search' | 'refresh' | 'restore' | 'sync' | 'trash' | 'edit' | 'key';
 
 const paths: Record<IconName, ReactNode> = {
   home: <><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></>,
@@ -27,9 +27,11 @@ const paths: Record<IconName, ReactNode> = {
   copy: <><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></>,
   search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
   refresh: <><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 8A7 7 0 0 1 18.5 6L20 8M4 16l1.5 2A7 7 0 0 0 18 16"/></>,
+  restore: <><path d="M4 9V4m0 0h5M4 4l3.2 3.2A8 8 0 1 1 5 15"/><path d="M12 8v5l3 2"/></>,
   sync: <><path d="M6.2 8.1A7 7 0 0 1 18.7 7"/><path d="M18.7 7V3.8M18.7 7h-3.2"/><path d="M17.8 15.9A7 7 0 0 1 5.3 17"/><path d="M5.3 17v3.2M5.3 17h3.2"/><circle cx="12" cy="12" r="2.2"/></>,
   trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></>,
   edit: <><path d="M4 20h4l11-11-4-4L4 16zM13.5 6.5l4 4"/></>,
+  key: <><circle cx="8" cy="12" r="4"/><path d="M12 12h9M17 12v3M20 12v2"/></>,
 };
 
 export function UiIcon({ name, size = 24 }: { name: IconName; size?: number }) {

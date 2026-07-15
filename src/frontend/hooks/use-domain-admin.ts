@@ -17,7 +17,7 @@ const demoCategories = ['AI', 'Apple', 'Google', 'YouTube', 'GitHub', 'Cloudflar
 const localDemoData: RulesData = {
   version: 1,
   settings: { baseUrl: '', policyName: 'PROXY', publicLinksEnabled: true, tokenLinksEnabled: true, customIconPackUrls: [], customIconPackNames: {} },
-  meta: { d1Ready: false, adminPasswordConfigured: true, ruleTokenConfigured: true, sessionSecretConfigured: true },
+  meta: { d1Ready: false, adminPasswordConfigured: true, ruleTokenConfigured: true, sessionSecretConfigured: true, apiKeyConfigured: false },
   categories: demoCategories,
   updatedAt: '2026-07-13T00:00:00.000Z',
 };
@@ -30,6 +30,7 @@ export function useDomainAdmin() {
     passwordConfigured: false,
     ruleTokenConfigured: false,
     sessionSecretConfigured: false,
+    apiKeyConfigured: false,
     d1Ready: false,
   });
   const [loading, setLoading] = useState(true);
@@ -95,7 +96,7 @@ export function useDomainAdmin() {
     clearError: () => setError(''),
     meta,
     refresh,
-    createCategory: (input: { name: string; icon?: string; description?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; syncIntervalMinutes?: number }) =>
+    createCategory: (input: { name: string; icon?: string; description?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; syncIntervalMinutes?: number; tokenLinksEnabled?: boolean; publicLinksEnabled?: boolean }) =>
       mutate('/api/categories', { method: 'POST', body: JSON.stringify(input) }),
     updateCategory: (id: string, input: Record<string, unknown>) =>
       mutate(`/api/categories/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
@@ -130,8 +131,17 @@ export function useDomainAdmin() {
       }),
     exportData: async () => {
       const response = await fetch('/api/data');
-      return JSON.stringify(await response.json(), null, 2);
+      if (!response.ok) throw new Error('备份导出失败');
+      return JSON.stringify(await response.json());
     },
     importData: (json: string) => mutate('/api/data', { method: 'PUT', body: json }),
+    createApiKey: async () => {
+      const response = await fetch('/api/api-key', { method: 'POST' });
+      const payload = (await response.json().catch(() => ({}))) as { apiKey?: string; createdAt?: string; error?: string };
+      if (!response.ok || !payload.apiKey) throw new Error(payload.error ?? 'API Key 生成失败');
+      await refresh(true);
+      return { apiKey: payload.apiKey, createdAt: payload.createdAt };
+    },
+    deleteApiKey: () => mutate('/api/api-key', { method: 'DELETE' }),
   };
 }

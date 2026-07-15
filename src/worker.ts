@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import type { AppVariables, Env } from './types';
-import { authConfigured, checkPassword, createSession, destroySession, isAuthenticated, requireAuth, safeFileName, tokenMatches } from './lib/auth';
+import { apiKeyConfigured, apiKeyStatus, authConfigured, checkPassword, createApiKey, createSession, deleteApiKey, destroySession, isAuthenticated, requireAuth, requireSessionAuth, safeFileName, tokenMatches } from './lib/auth';
 import {
   addRule,
   createCategory,
@@ -24,14 +24,29 @@ import { searchGeoSources } from './lib/geosite';
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 type AppContext = Context<{ Bindings: Env; Variables: AppVariables }>;
+type AppMiddleware = MiddlewareHandler<{ Bindings: Env; Variables: AppVariables }>;
 
 app.use('*', async (c, next) => {
   await ensureDatabase(c.env);
   await next();
 });
 
+const apiCors: AppMiddleware = async (c, next) => {
+  if (c.req.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
+    'access-control-allow-origin': '*',
+    'access-control-allow-headers': 'Authorization, Content-Type',
+    'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'access-control-max-age': '86400',
+  } });
+  await next();
+  c.header('access-control-allow-origin', '*');
+  c.header('access-control-allow-headers', 'Authorization, Content-Type');
+};
+app.use('/api', apiCors);
+app.use('/api/*', apiCors);
+
 function withLinks(c: AppContext, data: Awaited<ReturnType<typeof getRulesData>>) {
-  return { data, links: linksByCategory(data, c.req.url, c.env.RULE_TOKEN) };
+  return { data, links: linksByCategory(data, c.req.url, c.get('authType') === 'apiKey' ? undefined : c.env.RULE_TOKEN) };
 }
 
 async function adminApp(c: AppContext) {
@@ -62,6 +77,7 @@ app.get('/api/auth/me', async (c) => {
     passwordConfigured: Boolean(c.env.ADMIN_PASSWORD),
     ruleTokenConfigured: Boolean(c.env.RULE_TOKEN),
     sessionSecretConfigured: Boolean(c.env.SESSION_SECRET),
+    apiKeyConfigured: await apiKeyConfigured(c.env),
     d1Ready: Boolean(c.env.DB),
   });
 });
@@ -77,6 +93,27 @@ app.post('/api/auth/login', async (c) => {
 app.post('/api/auth/logout', async (c) => {
   await destroySession(c);
   return c.json({ ok: true });
+});
+
+app.get('/api', requireAuth, async (c) => json({
+  name: 'Private Rules API',
+  version: 1,
+  authentication: 'Authorization: Bearer <API_KEY>',
+  endpoints: {
+    rules: '/api/categories',
+    backup: '/api/data',
+    settings: '/api/settings',
+    sync: '/api/sync',
+  },
+}));
+
+app.get('/api/api-key', requireSessionAuth, async (c) => json(await apiKeyStatus(c.env)));
+
+app.post('/api/api-key', requireSessionAuth, async (c) => json(await createApiKey(c.env), { status: 201 }));
+
+app.delete('/api/api-key', requireSessionAuth, async (c) => {
+  await deleteApiKey(c.env);
+  return json({ configured: false });
 });
 
 app.get('/api/categories', requireAuth, async (c) => json(withLinks(c, await getRulesData(c.env))));

@@ -9,6 +9,9 @@ export default defineConfig({
       '@': new URL('./src', import.meta.url).pathname,
     },
   },
+  server: {
+    cors: true,
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

@@ -43,3 +43,124 @@
   flex-direction: column;
   margin-bottom: 14px;
 }
+.all-rules-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.all-rules-actions .search-box {
+  min-width: min(360px, 72vw);
+}
+
+.source-panel > .section-inline .sync-action {
+  border-radius: 12px;
+  flex: 0 0 auto;
+  height: 44px;
+  min-width: 126px;
+  white-space: nowrap;
+}
+
+.app-input.input-invalid {
+  border-color: color-mix(in srgb, #ef4444 72%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, #ef4444 12%, transparent);
+}
+
+.builder-fields small.field-error {
+  color: #ef4444;
+}
+
+.api-key-card {
+  display: grid;
+  gap: 14px;
+}
+
+.api-key-meta {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.api-key-meta > span,
+.api-key-usage,
+.api-key-reveal {
+  background: var(--panel-muted);
+  border: 1px solid var(--neko-line);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.api-key-meta > span {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.api-key-meta small,
+.api-key-usage span,
+.api-key-reveal small {
+  color: var(--neko-muted);
+}
+
+.api-key-meta code,
+.api-key-usage code,
+.api-key-reveal code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.api-key-reveal {
+  align-items: center;
+  border-color: color-mix(in srgb, #18a999 38%, var(--neko-line));
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 1.4fr) auto;
+}
+
+.api-key-reveal > div,
+.api-key-usage {
+  display: grid;
+  gap: 5px;
+}
+
+.api-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .all-rules-tools,
+  .all-rules-actions {
+    align-items: stretch;
+  }
+
+  .all-rules-actions,
+  .all-rules-actions .search-box {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .api-key-meta,
+  .api-key-reveal {
+    grid-template-columns: 1fr;
+  }
+
+  .api-key-reveal button {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 560px) {
+  .source-panel > .section-inline {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .source-panel > .section-inline .sync-action {
+    align-self: flex-start;
+    width: 158px;
+  }
+}

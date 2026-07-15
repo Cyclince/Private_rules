@@ -152,11 +152,13 @@ Fork 用户可以同步上游仓库后重新部署，D1 中的规则不会因前
 pnpm db:migrate:remote
 ```
 
-## Star History
+## Stars
 
 <div align="center">
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Cyclince/Private_rules&type=Date)](https://star-history.com/#Cyclince/Private_rules&Date)
+[![GitHub Stars](https://img.shields.io/github/stars/Cyclince/Private_rules?style=for-the-badge&logo=github&label=GitHub%20Stars)](https://www.star-history.com/Cyclince/Private_rules)
+
+点击徽章可在 Star History 查看历史趋势；当前 Star History 页面需要仓库所有者的 GitHub Token 才能读取时间线。
 
 </div>
 

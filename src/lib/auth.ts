@@ -24,6 +24,55 @@ async function verify(secret: string, value?: string) {
   return signature === expected ? sessionId : null;
 }
 
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function randomApiKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const token = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `prk_${token}`;
+}
+
+async function storedSetting(env: Env, key: string) {
+  const row = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first<{ value: string | null }>();
+  return row?.value ?? '';
+}
+
+export async function apiKeyConfigured(env: Env) {
+  return Boolean(await storedSetting(env, 'apiKeyHash'));
+}
+
+export async function createApiKey(env: Env) {
+  const apiKey = randomApiKey();
+  const createdAt = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind('apiKeyHash', await sha256(apiKey)),
+    env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind('apiKeyCreatedAt', createdAt),
+  ]);
+  return { apiKey, createdAt };
+}
+
+export async function deleteApiKey(env: Env) {
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM settings WHERE key = ?').bind('apiKeyHash'),
+    env.DB.prepare('DELETE FROM settings WHERE key = ?').bind('apiKeyCreatedAt'),
+  ]);
+}
+
+export async function apiKeyStatus(env: Env) {
+  return { configured: await apiKeyConfigured(env), createdAt: (await storedSetting(env, 'apiKeyCreatedAt')) || undefined };
+}
+
+async function validApiKey(c: Context<{ Bindings: Env; Variables: AppVariables }>) {
+  const authorization = c.req.header('authorization') ?? '';
+  const match = authorization.match(/^Bearer\s+(prk_[A-Za-z0-9_-]+)$/i);
+  if (!match) return false;
+  const expected = await storedSetting(c.env, 'apiKeyHash');
+  return Boolean(expected) && (await sha256(match[1])) === expected;
+}
+
 export async function createSession(c: Context<{ Bindings: Env; Variables: AppVariables }>) {
   const sessionId = id('sess');
   const created = new Date();
@@ -60,10 +109,24 @@ export async function isAuthenticated(c: Context<{ Bindings: Env; Variables: App
   return Boolean(await currentSessionId(c));
 }
 
-export const requireAuth: MiddlewareHandler<{ Bindings: Env; Variables: AppVariables }> = async (c, next) => {
+export const requireSessionAuth: MiddlewareHandler<{ Bindings: Env; Variables: AppVariables }> = async (c, next) => {
   const sessionId = await currentSessionId(c);
   if (!sessionId) return error('请先登录。', 401);
   c.set('sessionId', sessionId);
+  c.set('authType', 'session');
+  await next();
+};
+
+export const requireAuth: MiddlewareHandler<{ Bindings: Env; Variables: AppVariables }> = async (c, next) => {
+  const sessionId = await currentSessionId(c);
+  if (sessionId) {
+    c.set('sessionId', sessionId);
+    c.set('authType', 'session');
+    await next();
+    return;
+  }
+  if (!(await validApiKey(c))) return error('登录会话或 API Key 无效。', 401);
+  c.set('authType', 'apiKey');
   await next();
 };
 

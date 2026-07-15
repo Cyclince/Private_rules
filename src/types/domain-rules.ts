@@ -82,6 +82,7 @@ export type RulesData = {
     adminPasswordConfigured: boolean;
     ruleTokenConfigured: boolean;
     sessionSecretConfigured: boolean;
+    apiKeyConfigured: boolean;
   };
   categories: RuleCategory[];
   updatedAt: string;

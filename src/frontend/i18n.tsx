@@ -1,7 +1,19 @@
 import { createContext, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
-export type AppLocale = 'zh-CN' | 'zh-TW' | 'en';
+export type AppLocale = 'system' | 'zh-CN' | 'zh-TW' | 'en';
+type ResolvedLocale = Exclude<AppLocale, 'system'>;
+
+export function resolveSystemLocale(languages: readonly string[]): ResolvedLocale {
+  const normalized = (languages[0] ?? '').toLowerCase();
+  if (normalized.startsWith('zh')) return /(?:hant|tw|hk|mo)/.test(normalized) ? 'zh-TW' : 'zh-CN';
+  if (normalized.startsWith('en')) return 'en';
+  return 'en';
+}
+
+function detectSystemLocale(): ResolvedLocale {
+  return resolveSystemLocale(navigator.languages?.length ? navigator.languages : [navigator.language]);
+}
 
 let toTraditional: ((text: string) => string) | null = null;
 let traditionalLoader: Promise<void> | null = null;
@@ -26,6 +38,14 @@ const ENGLISH_PHRASES: Array<[string, string]> = [
   ['生成可随时恢复的标准 JSON 快照', 'Create a restorable standard JSON snapshot'],
   ['这里只显示配置状态，不展示敏感值', 'Shows configuration status without exposing sensitive values'],
   ['保存站点地址、策略组和自定义图标包设置', 'Save the site URL, policy group, and custom icon packs'],
+  ['允许其他项目通过 Bearer API Key 读取和维护规则数据库', 'Allow other projects to read and maintain the rules database with a Bearer API Key'],
+  ['为了安全，页面刷新后将不再显示明文', 'For security, the plaintext key disappears after the page is refreshed'],
+  ['可访问 `/api/categories`、`/api/data`、规则维护与同步接口', 'Access `/api/categories`, `/api/data`, rule maintenance, and sync endpoints'],
+  ['请立即复制 API Key', 'Copy the API Key now'], ['API 地址', 'API URL'], ['当前状态', 'Status'],
+  ['尚未创建', 'Not created'], ['已创建', 'Created'], ['生成 API Key', 'Generate API Key'],
+  ['重新生成', 'Regenerate'], ['删除 API Key', 'Delete API Key'], ['处理中…', 'Working…'],
+  ['API Key 已重新生成', 'API Key regenerated'], ['API Key 已生成', 'API Key generated'],
+  ['API Key 已删除', 'API Key deleted'], ['API Key 已复制', 'API Key copied'],
   ['从零维护规则，或聚合多个上游来源继续处理', 'Maintain your own rules or combine multiple upstream sources'],
   ['点击规则进入来源和同步管理', 'Open a rule to manage its sources and synchronization'],
   ['按来源与分类折叠，展开后查看具体规则', 'Grouped by source and category; expand to view rules'],
@@ -50,6 +70,31 @@ const ENGLISH_PHRASES: Array<[string, string]> = [
   ['规则数量从多到少排列', 'Sort by rule count'],
   ['按分类创建时间排列', 'Sort by creation time'],
   ['按最后修改时间排列', 'Sort by last modified time'],
+  ['输入域名、关键词、IP、类型、来源或分类即可模糊匹配', 'Fuzzy-search by domain, keyword, IP, type, source, or category'],
+  ['搜索域名、关键词、IP…', 'Search domains, keywords, or IPs…'],
+  ['默认私密访问，创建后可在订阅页修改', 'Private by default; change it anytime in Subscriptions'],
+  ['默认公开访问', 'Public by default'],
+  ['仅限英文字母、数字、空格和英文标点', 'Use ASCII letters, numbers, spaces, and punctuation only'],
+  ['分类名称仅支持英文字母、数字、空格和英文标点，且至少包含一个字母或数字。', 'Use only ASCII letters, numbers, spaces, and punctuation, including at least one letter or number.'],
+  ['保存后订阅链接会立即使用新名称', 'Subscription URLs update immediately after saving'],
+  ['没有匹配规则', 'No matching rules'],
+  ['完整域名', 'Exact domain'], ['域名后缀', 'Domain suffix'], ['关键词', 'Keyword'],
+  ['IP / IP 段', 'IP / CIDR'], ['源 IP 段', 'Source IP / CIDR'], ['站点集合', 'Site collection'],
+  ['国家 / 地区 IP', 'Country / region IP'], ['单个 IP', 'Single IP'], ['地址规则', 'Address rule'],
+  ['系统根据输入内容自动判断', 'Detect from the entered value'],
+  ['只匹配完整域名', 'Match the exact domain only'], ['匹配该域名及其子域名', 'Match the domain and its subdomains'],
+  ['匹配包含该关键词的域名', 'Match domains containing the keyword'], ['匹配 IP 地址或网段', 'Match an IP address or CIDR'],
+  ['匹配来源 IP 网段', 'Match a source IP CIDR'], ['匹配网络自治系统编号', 'Match an autonomous system number'],
+  ['匹配客户端内置的站点集合', 'Match a site collection built into the client'], ['匹配客户端内置的国家或地区 IP', 'Match country or region IP data built into the client'],
+  ['同步上游', 'Sync upstream'], ['每天自动更新，镜像规则保持只读', 'Updates daily; mirrored rules remain read-only'],
+  ['自动更新，镜像规则保持只读', ' automatic updates; mirrored rules remain read-only'],
+  ['每小时', 'Hourly'], ['每天', 'Daily'],
+  ['上游镜像规则', 'Upstream mirrored rules'], ['展开查看', 'Expand'], ['来自', 'From'], ['只读', 'Read-only'],
+  ['自定义规则不会被上游同步覆盖', 'Custom rules are never overwritten by upstream sync'],
+  ['仅这里的规则可以禁用或删除', 'Only rules listed here can be disabled or deleted'],
+  ['上游规则已在来源区域收起展示', 'Upstream rules are collapsed in the source section'],
+  ['维护这个规则下的内容', 'Manage the contents of this rule set'],
+  ['例如：ChatGPT 官网', 'Example: ChatGPT website'], ['例如：chatgpt.com、+.apple.com、127.0.0.0/8', 'Example: chatgpt.com, +.apple.com, 127.0.0.0/8'],
   ['分类名称', 'Rule name'], ['分类说明', 'Description'], ['规则图标', 'Rule icon'],
   ['从零构建', 'Build from scratch'], ['引用上游', 'Use upstream'],
   ['订阅地址', 'Subscription URL'], ['Geo 数据库', 'Geo database'],
@@ -58,6 +103,7 @@ const ENGLISH_PHRASES: Array<[string, string]> = [
   ['正在查询 Geo 数据索引…', 'Searching the Geo index…'], ['没有找到匹配的 Geo 规则', 'No matching Geo rules found'],
   ['创建规则', 'Create rule'], ['新建规则', 'New rule'], ['关闭新建规则', 'Close new rule dialog'],
   ['规则汇总', 'Rule library'], ['规则分类', 'Rule categories'], ['所有规则', 'All rules'],
+  ['全部规则', 'All rules'],
   ['自定义规则', 'Custom rules'], ['自定义维护', 'Custom maintenance'], ['上游订阅', 'Upstream subscriptions'],
   ['上游来源', 'Upstream sources'], ['只读镜像', 'Read-only mirror'], ['等待同步', 'Waiting to sync'],
   ['规则访问策略', 'Rule access policy'], ['私密访问（带密钥）', 'Private access (with token)'],
@@ -97,10 +143,16 @@ const ENGLISH_PHRASES: Array<[string, string]> = [
   ['例如', 'Example'], ['可留空', 'Optional'], ['一行一条，预览确认后再导入', 'One rule per line; preview before importing'],
   ['条启用规则', ' enabled rules'], ['条规则', ' rules'], ['个上游', ' upstream sources'], ['个 GeoSite', ' GeoSite'], ['个 GeoIP', ' GeoIP'],
   ['已同步', 'Synced'], ['同步于', 'Synced'], ['私密', 'Private'], ['公开', 'Public'], ['已禁用', 'Disabled'],
-  ['条', 'rules'],
+  ['条', 'rules'], ['暂无', 'No '],
 ];
 
 const orderedEnglishPhrases = [...ENGLISH_PHRASES].sort((a, b) => b[0].length - a[0].length);
+const TRADITIONAL_PHRASES: Array<[string, string]> = [
+  ['訂閱地址', '訂閱網址'], ['數據庫', '資料庫'], ['自定義', '自訂'], ['默認', '預設'],
+  ['圖標', '圖示'], ['文件', '檔案'], ['後臺', '後台'], ['站點', '網站'], ['界面', '介面'],
+  ['設置', '設定'], ['數據', '資料'], ['添加', '新增'], ['保存', '儲存'], ['恢復', '還原'],
+  ['導出', '匯出'], ['訪問', '存取'], ['鏈接', '連結'],
+];
 type TrackedText = { source: string; rendered: string };
 const trackedText = new WeakMap<Text, TrackedText>();
 const trackedAttributes = new WeakMap<Element, Map<string, TrackedText>>();
@@ -112,17 +164,25 @@ function english(text: string) {
     .replace(/(\d+)\s*条/g, '$1 rules')
     .replace(/(\d+)\s*个/g, '$1 ')
     .replace(/每\s*(\d+)\s*分钟/g, 'Every $1 minutes')
-    .replace(/每\s*(\d+)\s*小时/g, 'Every $1 hours');
+    .replace(/每\s*(\d+)\s*小时/g, 'Every $1 hours')
+    .replaceAll('，', ', ')
+    .replaceAll('：', ': ')
+    .replaceAll('、', ', ')
+    .replaceAll('。', '.');
   return output;
 }
 
-export function translateUiText(text: string, locale: AppLocale) {
+export function translateUiText(text: string, locale: ResolvedLocale) {
   if (locale === 'zh-CN') return text;
-  if (locale === 'zh-TW') return toTraditional?.(text) ?? text;
+  if (locale === 'zh-TW') {
+    let output = toTraditional?.(text) ?? text;
+    for (const [source, target] of TRADITIONAL_PHRASES) output = output.replaceAll(source, target);
+    return output;
+  }
   return english(text);
 }
 
-function translateTextNode(node: Text, locale: AppLocale) {
+function translateTextNode(node: Text, locale: ResolvedLocale) {
   const current = node.nodeValue ?? '';
   const previous = trackedText.get(node);
   const source = previous && current === previous.rendered ? previous.source : current;
@@ -131,7 +191,7 @@ function translateTextNode(node: Text, locale: AppLocale) {
   if (current !== rendered) node.nodeValue = rendered;
 }
 
-function translateAttribute(element: Element, name: string, locale: AppLocale) {
+function translateAttribute(element: Element, name: string, locale: ResolvedLocale) {
   const current = element.getAttribute(name);
   if (current == null) return;
   const attributes = trackedAttributes.get(element) ?? new Map<string, TrackedText>();
@@ -143,7 +203,7 @@ function translateAttribute(element: Element, name: string, locale: AppLocale) {
   if (current !== rendered) element.setAttribute(name, rendered);
 }
 
-function localizeNode(root: Node, locale: AppLocale) {
+function localizeNode(root: Node, locale: ResolvedLocale) {
   if (root instanceof Text) {
     translateTextNode(root, locale);
     return;
@@ -153,10 +213,11 @@ function localizeNode(root: Node, locale: AppLocale) {
   for (const child of root.childNodes) localizeNode(child, locale);
 }
 
-function localizeDocument(locale: AppLocale) {
+function localizeDocument(locale: ResolvedLocale, preference?: AppLocale) {
   if (document.body) localizeNode(document.body, locale);
   document.documentElement.lang = locale;
   document.documentElement.dataset.locale = locale;
+  document.documentElement.dataset.localePreference = preference ?? locale;
 }
 
 function runUiTransition(kind: 'theme' | 'locale', update: () => void) {
@@ -174,32 +235,42 @@ const LocaleContext = createContext<LocaleContextValue>({ locale: 'zh-CN', setLo
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<AppLocale>(() => {
     const saved = localStorage.getItem('private-rules-locale');
-    return saved === 'zh-TW' || saved === 'en' ? saved : 'zh-CN';
+    return saved === 'zh-CN' || saved === 'zh-TW' || saved === 'en' || saved === 'system' ? saved : 'system';
   });
+  const [systemLocale, setSystemLocale] = useState<ResolvedLocale>(detectSystemLocale);
+  const resolvedLocale = locale === 'system' ? systemLocale : locale;
+
+  useLayoutEffect(() => {
+    const update = () => setSystemLocale(detectSystemLocale());
+    window.addEventListener('languagechange', update);
+    return () => window.removeEventListener('languagechange', update);
+  }, []);
 
   useLayoutEffect(() => {
     localStorage.setItem('private-rules-locale', locale);
-    if (locale === 'zh-TW') void ensureTraditionalConverter().then(() => localizeDocument(locale));
-    else localizeDocument(locale);
+    if (resolvedLocale === 'zh-TW') void ensureTraditionalConverter().then(() => localizeDocument(resolvedLocale, locale));
+    else localizeDocument(resolvedLocale, locale);
     const observer = new MutationObserver((records) => {
       for (const record of records) {
-        if (record.type === 'characterData') translateTextNode(record.target as Text, locale);
-        else for (const node of record.addedNodes) localizeNode(node, locale);
+        if (record.type === 'characterData') translateTextNode(record.target as Text, resolvedLocale);
+        else for (const node of record.addedNodes) localizeNode(node, resolvedLocale);
       }
     });
     observer.observe(document.body, { childList: true, characterData: true, subtree: true });
     return () => observer.disconnect();
-  }, [locale]);
+  }, [locale, resolvedLocale]);
 
   const value = useMemo<LocaleContextValue>(() => ({ locale, setLocale: (next) => {
     if (next === locale) return;
     const commit = () => runUiTransition('locale', () => {
       flushSync(() => setLocaleState(next));
-      localizeDocument(next);
+      const resolvedNext = next === 'system' ? systemLocale : next;
+      localizeDocument(resolvedNext, next);
     });
-    if (next === 'zh-TW') void ensureTraditionalConverter().then(commit);
+    const resolvedNext = next === 'system' ? systemLocale : next;
+    if (resolvedNext === 'zh-TW') void ensureTraditionalConverter().then(commit);
     else commit();
-  } }), [locale]);
+  } }), [locale, systemLocale]);
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }

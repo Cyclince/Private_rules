@@ -1,13 +1,20 @@
 export function slugify(value: string) {
-  const source = value.trim().replace(/\.[^.]+$/, '');
+  const source = value.trim();
   const ascii = source
     .normalize('NFKD')
-    .replace(/[^\w\s.-]/g, '')
-    .replace(/[\s.]+/g, '-')
+    .replace(/[^\x20-\x7E]/g, '')
     .replace(/[^a-z0-9_-]+/gi, '-')
     .replace(/^-+|-+$/g, '');
 
-  return ascii || source.replace(/\s+/g, '-') || 'Custom';
+  return ascii || 'rule';
+}
+
+/** Category names are used to derive portable subscription file names. */
+export function validateCategoryName(value: string) {
+  const name = value.trim();
+  if (!name) return '请输入分类名称。';
+  if (!/^[\x20-\x7E]+$/.test(name) || !/[a-z0-9]/i.test(name)) return '分类名称仅支持英文字母、数字、空格和英文标点，且至少包含一个字母或数字。';
+  return '';
 }
 
 export function id(prefix = 'id') {

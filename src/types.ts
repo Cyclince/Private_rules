@@ -10,6 +10,7 @@ export type Env = {
 
 export type AppVariables = {
   sessionId?: string;
+  authType?: 'session' | 'apiKey';
 };
 
 export type ApiOk<T> = {
