@@ -5,7 +5,7 @@ import { id } from './slug';
 import { now } from './db';
 import { loadGeositeRules } from './geosite';
 
-type SourceRecord = { id: string; category_id: string; name: string; url: string; last_synced_at: string | null; sync_interval_minutes: number | null; source_type: 'url' | 'geosite' | 'geoip' | null; geosite_name: string | null; geoip_name: string | null };
+type SourceRecord = { id: string; category_id: string; name: string; url: string; last_synced_at: string | null; sync_interval_minutes: number | null; user_agent: string | null; source_type: 'url' | 'geosite' | 'geoip' | null; geosite_name: string | null; geoip_name: string | null };
 export type SyncResult = { sourceId: string; categoryId: string; name: string; ok: boolean; count: number; error?: string; syncedAt: string };
 
 export function isSourceDue(source: Pick<SourceRecord, 'last_synced_at' | 'sync_interval_minutes'>, force = false, nowMs = Date.now()) {
@@ -47,7 +47,10 @@ async function syncSource(env: Env, source: SourceRecord): Promise<SyncResult> {
       text = networks.map((network) => `IP-CIDR,${network}`).join('\n');
     }
     else {
-      const response = await fetch(source.url, { headers: { accept: 'text/plain, application/yaml, application/json;q=0.8' } });
+      const response = await fetch(source.url, { headers: {
+        accept: 'text/plain, application/yaml, application/json;q=0.8',
+        'user-agent': source.user_agent || 'clash-verge/v2.5.1',
+      } });
       if (!response.ok) throw new Error(`上游返回 HTTP ${response.status}`);
       text = await response.text();
     }
@@ -72,8 +75,8 @@ async function syncSource(env: Env, source: SourceRecord): Promise<SyncResult> {
 
 export async function syncRuleSources(env: Env, categoryId?: string, force = true) {
   const query = categoryId
-    ? env.DB.prepare('SELECT id, category_id, name, url, last_synced_at, sync_interval_minutes, source_type, geosite_name, geoip_name FROM category_sources WHERE enabled = 1 AND category_id = ?').bind(categoryId)
-    : env.DB.prepare('SELECT id, category_id, name, url, last_synced_at, sync_interval_minutes, source_type, geosite_name, geoip_name FROM category_sources WHERE enabled = 1');
+    ? env.DB.prepare('SELECT id, category_id, name, url, last_synced_at, sync_interval_minutes, user_agent, source_type, geosite_name, geoip_name FROM category_sources WHERE enabled = 1 AND category_id = ?').bind(categoryId)
+    : env.DB.prepare('SELECT id, category_id, name, url, last_synced_at, sync_interval_minutes, user_agent, source_type, geosite_name, geoip_name FROM category_sources WHERE enabled = 1');
   const sources = await query.all<SourceRecord>();
   const results: SyncResult[] = [];
   const dueSources = (sources.results ?? []).filter((source) => isSourceDue(source, force));

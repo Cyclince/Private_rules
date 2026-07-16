@@ -37,6 +37,7 @@ type SourceRow = {
   last_synced_at: string | null; last_status: RuleSource['lastStatus'] | null;
   last_count: number | null; last_error: string | null;
   sync_interval_minutes: number | null;
+  user_agent: string | null;
   source_type: 'url' | 'geosite' | 'geoip' | null;
   geosite_name: string | null;
   geoip_name: string | null;
@@ -86,6 +87,7 @@ export function ensureDatabase(env: Env) {
       enabled INTEGER DEFAULT 1, last_synced_at TEXT, last_status TEXT DEFAULT 'pending',
       last_count INTEGER DEFAULT 0, last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
       sync_interval_minutes INTEGER DEFAULT 60,
+      user_agent TEXT DEFAULT 'clash-verge/v2.5.1',
       source_type TEXT DEFAULT 'url', geosite_name TEXT, geoip_name TEXT,
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
     )`,
@@ -117,6 +119,7 @@ export function ensureDatabase(env: Env) {
     if (!categoryNames.has('token_links_enabled')) alters.push('ALTER TABLE categories ADD COLUMN token_links_enabled INTEGER DEFAULT 1');
     if (!ruleNames.has('source_id')) alters.push('ALTER TABLE rules ADD COLUMN source_id TEXT');
     if (!sourceNames.has('sync_interval_minutes')) alters.push('ALTER TABLE category_sources ADD COLUMN sync_interval_minutes INTEGER DEFAULT 60');
+    if (!sourceNames.has('user_agent')) alters.push("ALTER TABLE category_sources ADD COLUMN user_agent TEXT DEFAULT 'clash-verge/v2.5.1'");
     if (!sourceNames.has('source_type')) alters.push("ALTER TABLE category_sources ADD COLUMN source_type TEXT DEFAULT 'url'");
     if (!sourceNames.has('geosite_name')) alters.push('ALTER TABLE category_sources ADD COLUMN geosite_name TEXT');
     if (!sourceNames.has('geoip_name')) alters.push('ALTER TABLE category_sources ADD COLUMN geoip_name TEXT');
@@ -155,6 +158,7 @@ function sourceFromRow(row: SourceRow): RuleSource {
   return { id: row.id, categoryId: row.category_id, name, url: row.url, enabled: row.enabled !== 0,
     lastSyncedAt: row.last_synced_at ?? undefined, lastStatus: row.last_status ?? 'pending',
     lastCount: row.last_count ?? 0, lastError: row.last_error ?? undefined, syncIntervalMinutes: row.sync_interval_minutes ?? 60,
+    userAgent: row.user_agent ?? 'clash-verge/v2.5.1',
     sourceType: row.source_type ?? 'url', geositeName: row.geosite_name ?? undefined, geoipName: row.geoip_name ?? undefined };
 }
 
@@ -275,7 +279,15 @@ export async function getRulesData(env: Env): Promise<RulesData> {
   };
 }
 
-type CategoryInput = Partial<RuleCategory> & { sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; syncIntervalMinutes?: number };
+type CategoryInput = Partial<RuleCategory> & { sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; syncIntervalMinutes?: number; userAgent?: string };
+
+const DEFAULT_USER_AGENT = 'clash-verge/v2.5.1';
+
+export function normalizeUserAgent(value?: string | null) {
+  const normalized = value?.trim() || DEFAULT_USER_AGENT;
+  if (normalized.length > 256 || /[\r\n\0]/.test(normalized)) throw new Error('User-Agent 格式不正确');
+  return normalized;
+}
 
 export async function createCategory(env: Env, input: CategoryInput) {
   const timestamp = now();
@@ -307,7 +319,7 @@ export async function createCategory(env: Env, input: CategoryInput) {
       timestamp,
     )
     .run();
-  if (input.sourceUrls?.length || input.geositeNames?.length || input.geoipNames?.length) await replaceCategorySources(env, categoryId, input.sourceUrls ?? [], input.syncIntervalMinutes ?? 60, input.geositeNames ?? [], input.geoipNames ?? []);
+  if (input.sourceUrls?.length || input.geositeNames?.length || input.geoipNames?.length) await replaceCategorySources(env, categoryId, input.sourceUrls ?? [], input.syncIntervalMinutes ?? 60, input.geositeNames ?? [], input.geoipNames ?? [], input.userAgent);
   return getRulesData(env);
 }
 
@@ -339,13 +351,14 @@ export async function updateCategory(env: Env, categoryId: string, input: Catego
     )
     .run();
   if (input.sourceUrls || input.geositeNames || input.geoipNames) {
-    const existingSource = await env.DB.prepare('SELECT sync_interval_minutes FROM category_sources WHERE category_id = ? LIMIT 1').bind(categoryId).first<{ sync_interval_minutes: number | null }>();
-    await replaceCategorySources(env, categoryId, input.sourceUrls ?? [], input.syncIntervalMinutes ?? existingSource?.sync_interval_minutes ?? 60, input.geositeNames ?? [], input.geoipNames ?? []);
+    const existingSource = await env.DB.prepare('SELECT sync_interval_minutes, user_agent FROM category_sources WHERE category_id = ? LIMIT 1').bind(categoryId).first<{ sync_interval_minutes: number | null; user_agent: string | null }>();
+    await replaceCategorySources(env, categoryId, input.sourceUrls ?? [], input.syncIntervalMinutes ?? existingSource?.sync_interval_minutes ?? 60, input.geositeNames ?? [], input.geoipNames ?? [], input.userAgent ?? existingSource?.user_agent);
   }
   return getRulesData(env);
 }
 
-export async function replaceCategorySources(env: Env, categoryId: string, sourceUrls: string[], syncIntervalMinutes = 60, geositeNames: string[] = [], geoipNames: string[] = []) {
+export async function replaceCategorySources(env: Env, categoryId: string, sourceUrls: string[], syncIntervalMinutes = 60, geositeNames: string[] = [], geoipNames: string[] = [], userAgent?: string | null) {
+  const normalizedUserAgent = normalizeUserAgent(userAgent);
   const urls = [...new Set(sourceUrls.map((url) => url.trim()).filter((url) => /^https?:\/\//i.test(url)))];
   const geosites = [...new Set(geositeNames.map((name) => name.trim().toLowerCase()).filter((name) => /^[a-z0-9_!@.-]+$/i.test(name)))];
   const geositeUrls = geosites.map((name) => `https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/${encodeURIComponent(name)}`);
@@ -359,15 +372,15 @@ export async function replaceCategorySources(env: Env, categoryId: string, sourc
   await env.DB.batch([
     ...removedSourceIds.map((sourceId) => env.DB.prepare('DELETE FROM rules WHERE source_id = ?').bind(sourceId)),
     ...urls.filter((url) => !existingByUrl.has(url)).map((url, index) => env.DB.prepare(
-      "INSERT INTO category_sources (id, category_id, name, url, enabled, last_status, sync_interval_minutes, source_type, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, 'url', ?, ?)",
-    ).bind(id('src'), categoryId, sourceNameFromUrl(url, `来源 ${index + 1}`), url, 'pending', syncIntervalMinutes, timestamp, timestamp)),
+      "INSERT INTO category_sources (id, category_id, name, url, enabled, last_status, sync_interval_minutes, user_agent, source_type, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, ?, 'url', ?, ?)",
+    ).bind(id('src'), categoryId, sourceNameFromUrl(url, `来源 ${index + 1}`), url, 'pending', syncIntervalMinutes, normalizedUserAgent, timestamp, timestamp)),
     ...geosites.filter((name) => !existingByUrl.has(`https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/${encodeURIComponent(name)}`)).map((name) => env.DB.prepare(
       "INSERT INTO category_sources (id, category_id, name, url, enabled, last_status, sync_interval_minutes, source_type, geosite_name, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, 'geosite', ?, ?, ?)",
     ).bind(id('src'), categoryId, `GeoSite · ${name}`, `https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/${encodeURIComponent(name)}`, 'pending', syncIntervalMinutes, name, timestamp, timestamp)),
     ...geoips.filter((name) => !existingByUrl.has(`https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/${encodeURIComponent(name)}.txt`)).map((name) => env.DB.prepare(
       "INSERT INTO category_sources (id, category_id, name, url, enabled, last_status, sync_interval_minutes, source_type, geoip_name, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, 'geoip', ?, ?, ?)",
     ).bind(id('src'), categoryId, `GeoIP · ${name}`, `https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/${encodeURIComponent(name)}.txt`, 'pending', syncIntervalMinutes, name, timestamp, timestamp)),
-    ...desiredUrls.filter((url) => existingByUrl.has(url)).map((url) => env.DB.prepare('UPDATE category_sources SET sync_interval_minutes = ?, updated_at = ? WHERE category_id = ? AND url = ?').bind(syncIntervalMinutes, timestamp, categoryId, url)),
+    ...desiredUrls.filter((url) => existingByUrl.has(url)).map((url) => env.DB.prepare("UPDATE category_sources SET sync_interval_minutes = ?, user_agent = CASE WHEN source_type = 'url' THEN ? ELSE user_agent END, updated_at = ? WHERE category_id = ? AND url = ?").bind(syncIntervalMinutes, normalizedUserAgent, timestamp, categoryId, url)),
     env.DB.prepare(desiredUrls.length
       ? `DELETE FROM category_sources WHERE category_id = ? AND url NOT IN (${desiredUrls.map(() => '?').join(',')})`
       : 'DELETE FROM category_sources WHERE category_id = ?').bind(categoryId, ...desiredUrls),
@@ -486,12 +499,12 @@ export async function importRulesData(env: Env, data: RulesData) {
       .run();
     for (const [sourceIndex, source] of (category.sources ?? []).entries()) {
       await env.DB.prepare(
-        'INSERT INTO category_sources (id, category_id, name, url, enabled, last_synced_at, last_status, last_count, last_error, sync_interval_minutes, source_type, geosite_name, geoip_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO category_sources (id, category_id, name, url, enabled, last_synced_at, last_status, last_count, last_error, sync_interval_minutes, user_agent, source_type, geosite_name, geoip_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ).bind(
         source.id || id('src'), categoryId, source.name || `来源 ${sourceIndex + 1}`, source.url,
         source.enabled === false ? 0 : 1, source.lastSyncedAt ?? null, source.lastStatus ?? 'pending',
         source.lastCount ?? 0, source.lastError ?? null, source.syncIntervalMinutes ?? category.syncIntervalMinutes ?? 60,
-        source.sourceType ?? 'url', source.geositeName ?? null, source.geoipName ?? null, category.createdAt ?? timestamp, category.updatedAt ?? timestamp,
+        normalizeUserAgent(source.userAgent), source.sourceType ?? 'url', source.geositeName ?? null, source.geoipName ?? null, category.createdAt ?? timestamp, category.updatedAt ?? timestamp,
       ).run();
     }
     for (const [ruleIndex, rule] of category.rules.entries()) {

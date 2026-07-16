@@ -402,6 +402,7 @@
 /* Upstream mirrors, access policies and wallpaper login */
 .mobile-sync-menu-meta { display: none; }
 .upstream-create-fields { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) 190px; }
+.upstream-request-fields { display: grid; gap: 14px; }
 .sync-interval-field { align-content: start; display: grid; gap: 7px; }
 .sync-interval-field > span { color: var(--neko-muted); font-size: 13px; }
 .upstream-rules-toggle { align-items: center; background: #f5f8fb; border: 1px solid #e4eaf0; border-radius: 13px; color: var(--neko-ink); display: flex; justify-content: space-between; min-height: 48px; padding: 0 14px; width: 100%; }

@@ -141,7 +141,7 @@ app.get('/api/categories', requireAuth, async (c) => json(withLinks(c, await get
 app.get('/api/geo/search', requireAuth, async (c) => json({ results: await searchGeoSources(c.req.query('q') ?? '') }));
 
 app.post('/api/categories', requireAuth, async (c) => {
-  const input = await c.req.json<{ name?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[] }>().catch(() => ({} as { name?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[] }));
+  const input = await c.req.json<{ name?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; userAgent?: string }>().catch(() => ({} as { name?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; userAgent?: string }));
   let data = await createCategory(c.env, input);
   if (input.sourceUrls?.length || input.geositeNames?.length || input.geoipNames?.length) {
     const created = data.categories.find((category) => category.name === input.name) ?? [...data.categories].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];

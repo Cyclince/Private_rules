@@ -100,7 +100,7 @@ export function useDomainAdmin() {
     meta,
     apiKeys,
     refresh,
-    createCategory: (input: { name: string; icon?: string; description?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; syncIntervalMinutes?: number; tokenLinksEnabled?: boolean; publicLinksEnabled?: boolean }) =>
+    createCategory: (input: { name: string; icon?: string; description?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; syncIntervalMinutes?: number; userAgent?: string; tokenLinksEnabled?: boolean; publicLinksEnabled?: boolean }) =>
       mutate('/api/categories', { method: 'POST', body: JSON.stringify(input) }),
     updateCategory: (id: string, input: Record<string, unknown>) =>
       mutate(`/api/categories/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),

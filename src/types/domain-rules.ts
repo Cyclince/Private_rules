@@ -34,6 +34,7 @@ export type RuleSource = {
   lastCount?: number;
   lastError?: string;
   syncIntervalMinutes: number;
+  userAgent?: string;
   sourceType?: 'url' | 'geosite' | 'geoip';
   geositeName?: string;
   geoipName?: string;

@@ -151,6 +151,7 @@ const ENGLISH_PHRASES: Array<[string, string]> = [
   ['从零构建', 'Build from scratch'], ['引用上游', 'Use upstream'],
   ['订阅地址', 'Subscription URL'], ['Geo 数据库', 'Geo database'],
   ['上游订阅地址，一行一个', 'Upstream URLs, one per line'], ['自动同步间隔', 'Automatic sync interval'],
+  ['常见值：clash-verge/v2.5.1、clash.meta/1.19.20、Clash', 'Common values: clash-verge/v2.5.1, clash.meta/1.19.20, Clash'],
   ['搜索 GeoSite 与 GeoIP', 'Search GeoSite and GeoIP'], ['输入关键词，例如', 'Enter a keyword, such as'],
   ['正在查询 Geo 数据索引…', 'Searching the Geo index…'], ['没有找到匹配的 Geo 规则', 'No matching Geo rules found'],
   ['创建规则', 'Create rule'], ['新建规则', 'New rule'], ['关闭新建规则', 'Close new rule dialog'],

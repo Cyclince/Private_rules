@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatters } from '../../src/lib/formatters';
 import { parseBulkImport } from '../../src/lib/parser';
 import { isSourceDue } from '../../src/lib/sync';
+import { normalizeUserAgent } from '../../src/lib/db';
 import type { RuleCategory, RulesData } from '../../src/types/domain-rules';
 
 describe('rule parsing and subscriptions', () => {
@@ -33,5 +34,13 @@ describe('sync due calculation', () => {
     expect(isSourceDue({ last_synced_at: '2026-01-01T00:30:01.000Z', sync_interval_minutes: 30 }, false, now)).toBe(false);
     expect(isSourceDue({ last_synced_at: '2026-01-01T00:30:00.000Z', sync_interval_minutes: 30 }, false, now)).toBe(true);
     expect(isSourceDue({ last_synced_at: null, sync_interval_minutes: 60 }, false, now)).toBe(true);
+  });
+});
+
+describe('upstream User-Agent', () => {
+  it('uses the Clash Verge default and validates custom values', () => {
+    expect(normalizeUserAgent()).toBe('clash-verge/v2.5.1');
+    expect(normalizeUserAgent(' clash.meta/1.19.20 ')).toBe('clash.meta/1.19.20');
+    expect(() => normalizeUserAgent('Clash\r\nX-Test: invalid')).toThrow('User-Agent 格式不正确');
   });
 });
