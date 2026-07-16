@@ -58,6 +58,8 @@ export type RuleCategory = {
   enabled?: boolean;
   sortOrder?: number;
   rules: DomainRule[];
+  ruleCount?: number;
+  activeRuleCount?: number;
   createdAt?: string;
   updatedAt: string;
   publicLinksEnabled?: boolean;

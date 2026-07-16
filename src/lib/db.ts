@@ -162,7 +162,7 @@ function sourceFromRow(row: SourceRow): RuleSource {
     sourceType: row.source_type ?? 'url', geositeName: row.geosite_name ?? undefined, geoipName: row.geoip_name ?? undefined };
 }
 
-function categoryFromRow(row: CategoryRow, rules: DomainRule[], sources: RuleSource[]): RuleCategory {
+function categoryFromRow(row: CategoryRow, rules: DomainRule[], sources: RuleSource[], counts?: { total: number; active: number }): RuleCategory {
   const uniqueRules = new Map<string, DomainRule>();
   for (const rule of rules) {
     const key = `${rule.type}:${rule.value}`.toLowerCase();
@@ -181,6 +181,8 @@ function categoryFromRow(row: CategoryRow, rules: DomainRule[], sources: RuleSou
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     rules: [...uniqueRules.values()],
+    ruleCount: counts?.total ?? uniqueRules.size,
+    activeRuleCount: counts?.active ?? [...uniqueRules.values()].filter((rule) => rule.enabled).length,
     publicLinksEnabled: row.public_links_enabled !== 0,
     tokenLinksEnabled: row.token_links_enabled !== 0,
     sources,
@@ -241,11 +243,22 @@ export async function saveSettings(env: Env, input: Partial<RuleSettings>) {
   return next;
 }
 
-export async function getRulesData(env: Env): Promise<RulesData> {
-  const [categoryRows, ruleRows, sourceRows, settings, apiKeyRow] = await Promise.all([
+export async function getRulesData(env: Env, options: { upstreamPreviewLimit?: number } = {}): Promise<RulesData> {
+  const ruleQuery = options.upstreamPreviewLimit === undefined
+    ? env.DB.prepare('SELECT * FROM rules ORDER BY sort_order ASC, created_at ASC')
+    : env.DB.prepare(`SELECT id, category_id, value, type, display_type, note, enabled, sort_order, created_at, updated_at, source_id
+        FROM rules WHERE source_id IS NULL
+        UNION ALL
+        SELECT id, category_id, value, type, display_type, note, enabled, sort_order, created_at, updated_at, source_id FROM (
+          SELECT rules.*, ROW_NUMBER() OVER (PARTITION BY category_id ORDER BY sort_order ASC, created_at ASC) AS preview_rank
+          FROM rules WHERE source_id IS NOT NULL
+        ) WHERE preview_rank <= ?
+        ORDER BY sort_order ASC, created_at ASC`).bind(options.upstreamPreviewLimit);
+  const [categoryRows, ruleRows, sourceRows, countRows, settings, apiKeyRow] = await Promise.all([
     env.DB.prepare('SELECT * FROM categories ORDER BY sort_order ASC, created_at ASC').all<CategoryRow>(),
-    env.DB.prepare('SELECT * FROM rules ORDER BY sort_order ASC, created_at ASC').all<RuleRow>(),
+    ruleQuery.all<RuleRow>(),
     env.DB.prepare('SELECT * FROM category_sources ORDER BY created_at ASC').all<SourceRow>(),
+    env.DB.prepare('SELECT category_id, COUNT(*) AS total, SUM(CASE WHEN enabled <> 0 THEN 1 ELSE 0 END) AS active FROM rules GROUP BY category_id').all<{ category_id: string; total: number; active: number }>(),
     getSettings(env),
     env.DB.prepare('SELECT id FROM api_keys LIMIT 1').first<{ id: string }>(),
   ]);
@@ -258,9 +271,10 @@ export async function getRulesData(env: Env): Promise<RulesData> {
   }
 
   const sources = (sourceRows.results ?? []).map(sourceFromRow);
+  const counts = new Map((countRows.results ?? []).map((row) => [row.category_id, { total: Number(row.total), active: Number(row.active) }]));
   const sourceNames = new Map(sources.map((source) => [source.id, source.name]));
   for (const list of rulesByCategory.values()) for (const rule of list) if (rule.sourceId) rule.sourceName = sourceNames.get(rule.sourceId);
-  const categories = (categoryRows.results ?? []).map((row) => categoryFromRow(row, rulesByCategory.get(row.id) ?? [], sources.filter((source) => source.categoryId === row.id)));
+  const categories = (categoryRows.results ?? []).map((row) => categoryFromRow(row, rulesByCategory.get(row.id) ?? [], sources.filter((source) => source.categoryId === row.id), counts.get(row.id)));
   const updatedAt = categories.reduce((latest, category) => (category.updatedAt > latest ? category.updatedAt : latest), '');
 
   return {
@@ -277,6 +291,45 @@ export async function getRulesData(env: Env): Promise<RulesData> {
     updatedAt: updatedAt || now(),
     lastSyncedAt: sources.reduce<string | undefined>((latest, source) => !latest || (source.lastSyncedAt ?? '') > latest ? source.lastSyncedAt : latest, undefined),
   };
+}
+
+export async function getCategoryRules(env: Env, categoryId: string): Promise<DomainRule[]> {
+  const [ruleRows, sourceRows] = await Promise.all([
+    env.DB.prepare('SELECT * FROM rules WHERE category_id = ? ORDER BY sort_order ASC, created_at ASC').bind(categoryId).all<RuleRow>(),
+    env.DB.prepare('SELECT * FROM category_sources WHERE category_id = ?').bind(categoryId).all<SourceRow>(),
+  ]);
+  const sourceNames = new Map((sourceRows.results ?? []).map((row) => [row.id, sourceFromRow(row).name]));
+  return (ruleRows.results ?? []).map((row) => {
+    const rule = ruleFromRow(row);
+    if (rule.sourceId) rule.sourceName = sourceNames.get(rule.sourceId);
+    return rule;
+  });
+}
+
+export async function searchRules(env: Env, query: string): Promise<DomainRule[]> {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return [];
+  const pattern = `%${normalized}%`;
+  const rows = await env.DB.prepare(`SELECT rules.*,
+      category_sources.name AS matched_source_name
+    FROM rules
+    JOIN categories ON categories.id = rules.category_id
+    LEFT JOIN category_sources ON category_sources.id = rules.source_id
+    WHERE LOWER(rules.value) LIKE ?
+       OR LOWER(rules.type) LIKE ?
+       OR LOWER(IFNULL(rules.display_type, '')) LIKE ?
+       OR LOWER(IFNULL(rules.note, '')) LIKE ?
+       OR LOWER(IFNULL(category_sources.name, '')) LIKE ?
+       OR LOWER(categories.name) LIKE ?
+       OR LOWER(IFNULL(categories.description, '')) LIKE ?
+    ORDER BY categories.sort_order ASC, rules.sort_order ASC, rules.created_at ASC`)
+    .bind(pattern, pattern, pattern, pattern, pattern, pattern, pattern)
+    .all<RuleRow & { matched_source_name: string | null }>();
+  return (rows.results ?? []).map((row) => {
+    const rule = ruleFromRow(row);
+    if (rule.sourceId) rule.sourceName = row.matched_source_name ?? undefined;
+    return rule;
+  });
 }
 
 export async function getBackupData(env: Env): Promise<RulesBackupData> {

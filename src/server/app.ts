@@ -10,10 +10,12 @@ import {
   deleteCategory,
   deleteRule,
   getBackupData,
+  getCategoryRules,
   getRulesData,
   importRulesData,
   insertRule,
   saveSettings,
+  searchRules,
   updateCategory,
   updateRule,
 } from '../lib/db';
@@ -137,51 +139,54 @@ app.patch('/api/api-keys/:keyId', requireSessionAuth, async (c) => {
   return json({ updated: true });
 });
 
-app.get('/api/categories', requireAuth, async (c) => json(withLinks(c, await getRulesData(c.env))));
+app.get('/api/categories', requireAuth, async (c) => json(withLinks(c, await getRulesData(c.env, { upstreamPreviewLimit: 30 }))));
+
+app.get('/api/categories/:id/rules', requireAuth, async (c) => json({ rules: await getCategoryRules(c.env, c.req.param('id')) }));
+
+app.get('/api/rules/search', requireAuth, async (c) => json({ rules: await searchRules(c.env, c.req.query('q') ?? '') }));
 
 app.get('/api/geo/search', requireAuth, async (c) => json({ results: await searchGeoSources(c.req.query('q') ?? '') }));
 
 app.post('/api/categories', requireAuth, async (c) => {
   const input = await c.req.json<{ name?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; userAgent?: string }>().catch(() => ({} as { name?: string; sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; userAgent?: string }));
-  let data = await createCategory(c.env, input);
+  const data = await createCategory(c.env, input);
   if (input.sourceUrls?.length || input.geositeNames?.length || input.geoipNames?.length) {
     const created = data.categories.find((category) => category.name === input.name) ?? [...data.categories].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
     if (created) await syncRuleSources(c.env, created.id);
-    data = await getRulesData(c.env);
   }
-  return json(withLinks(c, data), { status: 201 });
+  return json({ created: true }, { status: 201 });
 });
 
 app.patch('/api/categories/:id', requireAuth, async (c) => {
-  const data = await updateCategory(c.env, c.req.param('id'), await c.req.json().catch(() => ({})));
-  return json(withLinks(c, data));
+  await updateCategory(c.env, c.req.param('id'), await c.req.json().catch(() => ({})));
+  return json({ updated: true });
 });
 
 app.delete('/api/categories/:id', requireAuth, async (c) => {
-  const data = await deleteCategory(c.env, c.req.param('id'));
-  return json(withLinks(c, data));
+  await deleteCategory(c.env, c.req.param('id'));
+  return json({ deleted: true });
 });
 
 app.post('/api/categories/:id/rules', requireAuth, async (c) => {
-  const data = await addRule(c.env, c.req.param('id'), await c.req.json().catch(() => ({})));
-  return json(withLinks(c, data), { status: 201 });
+  await addRule(c.env, c.req.param('id'), await c.req.json().catch(() => ({})));
+  return json({ created: true }, { status: 201 });
 });
 
 app.patch('/api/categories/:id/rules/:ruleId', requireAuth, async (c) => {
-  const data = await updateRule(c.env, c.req.param('id'), c.req.param('ruleId'), await c.req.json().catch(() => ({})));
-  return json(withLinks(c, data));
+  await updateRule(c.env, c.req.param('id'), c.req.param('ruleId'), await c.req.json().catch(() => ({})));
+  return json({ updated: true });
 });
 
 app.delete('/api/categories/:id/rules/:ruleId', requireAuth, async (c) => {
-  const data = await deleteRule(c.env, c.req.param('id'), c.req.param('ruleId'));
-  return json(withLinks(c, data));
+  await deleteRule(c.env, c.req.param('id'), c.req.param('ruleId'));
+  return json({ deleted: true });
 });
 
 app.post('/api/categories/:id/rules/batch', requireAuth, async (c) => {
   const body = await c.req.json<{ ruleIds?: string[]; action?: 'enable' | 'disable' | 'delete' }>().catch(() => ({})) as { ruleIds?: string[]; action?: 'enable' | 'disable' | 'delete' };
   if (!body.action || !['enable', 'disable', 'delete'].includes(body.action)) return error('批量操作无效。', 400);
-  const data = await batchUpdateRules(c.env, c.req.param('id'), body.ruleIds ?? [], body.action);
-  return json(withLinks(c, data));
+  await batchUpdateRules(c.env, c.req.param('id'), body.ruleIds ?? [], body.action);
+  return json({ updated: true });
 });
 
 app.post('/api/categories/:id/rules/bulk-import', requireAuth, async (c) => {
@@ -190,16 +195,14 @@ app.post('/api/categories/:id/rules/bulk-import', requireAuth, async (c) => {
     text?: string;
     confirm?: boolean;
   };
-  const data = await getRulesData(c.env);
-  const category = data.categories.find((item) => item.id === categoryId);
+  const category = await c.env.DB.prepare('SELECT id FROM categories WHERE id = ?').bind(categoryId).first<{ id: string }>();
   if (!category) return error('分类不存在。', 404);
-  const preview = parseBulkImport(body.text ?? '', category.rules);
+  const preview = parseBulkImport(body.text ?? '', await getCategoryRules(c.env, categoryId));
   if (!body.confirm) return json({ preview });
   for (const [index, rule] of preview.rules.entries()) {
     await insertRule(c.env, categoryId, rule, Date.now() + index);
   }
-  const next = await getRulesData(c.env);
-  return json({ preview, ...withLinks(c, next) });
+  return json({ preview });
 });
 
 app.get('/api/settings', requireAuth, async (c) => {
@@ -210,7 +213,7 @@ app.get('/api/settings', requireAuth, async (c) => {
 app.patch('/api/settings', requireAuth, async (c) => {
   const input = await c.req.json().catch(() => ({}));
   await saveSettings(c.env, input);
-  return json(withLinks(c, await getRulesData(c.env)));
+  return json({ updated: true });
 });
 
 app.get('/api/links', requireAuth, async (c) => {
@@ -220,12 +223,12 @@ app.get('/api/links', requireAuth, async (c) => {
 
 app.post('/api/sync', requireAuth, async (c) => {
   const results = await syncRuleSources(c.env);
-  return json({ results, ...withLinks(c, await getRulesData(c.env)) });
+  return json({ results });
 });
 
 app.post('/api/categories/:id/sync', requireAuth, async (c) => {
   const results = await syncRuleSources(c.env, c.req.param('id'));
-  return json({ results, ...withLinks(c, await getRulesData(c.env)) });
+  return json({ results });
 });
 
 app.get('/api/data', requireAuth, async (c) => json(await getBackupData(c.env)));
@@ -233,7 +236,8 @@ app.get('/api/data', requireAuth, async (c) => json(await getBackupData(c.env)))
 app.put('/api/data', requireAuth, async (c) => {
   const data = await c.req.json().catch(() => null);
   if (!data?.categories || !data?.settings) return error('备份 JSON 格式不正确。');
-  return json(withLinks(c, await importRulesData(c.env, data)));
+  await importRulesData(c.env, data);
+  return json({ imported: true });
 });
 
 async function subscription(c: AppContext, file: string, access: 'public' | 'token') {

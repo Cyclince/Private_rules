@@ -114,6 +114,16 @@ export function useDomainAdmin() {
       if (!response.ok) throw new Error('Geo 数据索引加载失败');
       return ((await response.json()) as { results: GeoSourceSuggestion[] }).results;
     },
+    loadCategoryRules: async (categoryId: string, signal?: AbortSignal) => {
+      const response = await fetch(`/api/categories/${categoryId}/rules`, { signal });
+      if (!response.ok) throw new Error('完整规则加载失败');
+      return ((await response.json()) as { rules: DomainRule[] }).rules;
+    },
+    searchRules: async (query: string, signal?: AbortSignal) => {
+      const response = await fetch(`/api/rules/search?q=${encodeURIComponent(query)}`, { signal });
+      if (!response.ok) throw new Error('规则搜索失败');
+      return ((await response.json()) as { rules: DomainRule[] }).rules;
+    },
     addRule: (categoryId: string, input: { value: string; type?: DomainRuleType; note?: string }) =>
       mutate(`/api/categories/${categoryId}/rules`, { method: 'POST', body: JSON.stringify(input) }),
     updateRule: (categoryId: string, rule: DomainRule) =>
