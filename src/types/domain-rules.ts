@@ -91,6 +91,10 @@ export type RulesData = {
   lastSyncedAt?: string;
 };
 
+export type BackupRuleSource = Partial<RuleSource> & Pick<RuleSource, 'sourceType'>;
+export type BackupRuleCategory = Omit<RuleCategory, 'sources'> & { sources?: BackupRuleSource[] };
+export type RulesBackupData = Omit<RulesData, 'categories' | 'meta' | 'lastSyncedAt'> & { categories: BackupRuleCategory[] };
+
 export type ClientId =
   | 'general'
   | 'clash'

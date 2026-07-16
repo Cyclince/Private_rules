@@ -1,4 +1,4 @@
-import type { DomainRule, RuleCategory, RuleSettings, RuleSource, RulesData } from '../types/domain-rules';
+import type { BackupRuleSource, DomainRule, RuleCategory, RuleSettings, RuleSource, RulesBackupData, RulesData } from '../types/domain-rules';
 import type { Env } from '../types';
 import { parseRuleInput } from './parser';
 import { id, slugify, validateCategoryName } from './slug';
@@ -279,6 +279,27 @@ export async function getRulesData(env: Env): Promise<RulesData> {
   };
 }
 
+export async function getBackupData(env: Env): Promise<RulesBackupData> {
+  const data = await getRulesData(env);
+  const { meta: _meta, lastSyncedAt: _lastSyncedAt, categories, ...backup } = data;
+  return {
+    ...backup,
+    categories: categories.map((category) => {
+      const { lastSyncedAt: _categoryLastSyncedAt, syncIntervalMinutes: _syncIntervalMinutes, sources, rules, ...categoryBackup } = category;
+      return {
+        ...categoryBackup,
+        rules: rules.filter((rule) => !rule.sourceId),
+        sources: sources?.map((source): BackupRuleSource => {
+          const common = { sourceType: source.sourceType ?? 'url', enabled: source.enabled, syncIntervalMinutes: source.syncIntervalMinutes };
+          if (common.sourceType === 'geosite') return { ...common, geositeName: source.geositeName };
+          if (common.sourceType === 'geoip') return { ...common, geoipName: source.geoipName };
+          return { ...common, url: source.url, userAgent: source.userAgent };
+        }),
+      };
+    }),
+  };
+}
+
 type CategoryInput = Partial<RuleCategory> & { sourceUrls?: string[]; geositeNames?: string[]; geoipNames?: string[]; syncIntervalMinutes?: number; userAgent?: string };
 
 const DEFAULT_USER_AGENT = 'clash-verge/v2.5.1';
@@ -469,7 +490,7 @@ export async function insertRule(env: Env, categoryId: string, rule: DomainRule,
     .run();
 }
 
-export async function importRulesData(env: Env, data: RulesData) {
+export async function importRulesData(env: Env, data: RulesData | RulesBackupData) {
   const timestamp = now();
   await saveSettings(env, data.settings);
   await env.DB.batch([
@@ -498,13 +519,24 @@ export async function importRulesData(env: Env, data: RulesData) {
       )
       .run();
     for (const [sourceIndex, source] of (category.sources ?? []).entries()) {
+      const sourceType = source.sourceType ?? 'url';
+      const sourceUrl = source.url || (sourceType === 'geosite' && source.geositeName
+        ? `https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/${encodeURIComponent(source.geositeName)}`
+        : sourceType === 'geoip' && source.geoipName
+          ? `https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/${encodeURIComponent(source.geoipName)}.txt`
+          : '');
+      const sourceName = source.name || (sourceType === 'geosite' && source.geositeName
+        ? `GeoSite · ${source.geositeName}`
+        : sourceType === 'geoip' && source.geoipName
+          ? `GeoIP · ${source.geoipName}`
+          : sourceNameFromUrl(sourceUrl, `来源 ${sourceIndex + 1}`));
       await env.DB.prepare(
         'INSERT INTO category_sources (id, category_id, name, url, enabled, last_synced_at, last_status, last_count, last_error, sync_interval_minutes, user_agent, source_type, geosite_name, geoip_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ).bind(
-        source.id || id('src'), categoryId, source.name || `来源 ${sourceIndex + 1}`, source.url,
+        source.id || id('src'), categoryId, sourceName, sourceUrl,
         source.enabled === false ? 0 : 1, source.lastSyncedAt ?? null, source.lastStatus ?? 'pending',
         source.lastCount ?? 0, source.lastError ?? null, source.syncIntervalMinutes ?? category.syncIntervalMinutes ?? 60,
-        normalizeUserAgent(source.userAgent), source.sourceType ?? 'url', source.geositeName ?? null, source.geoipName ?? null, category.createdAt ?? timestamp, category.updatedAt ?? timestamp,
+        normalizeUserAgent(source.userAgent), sourceType, source.geositeName ?? null, source.geoipName ?? null, category.createdAt ?? timestamp, category.updatedAt ?? timestamp,
       ).run();
     }
     for (const [ruleIndex, rule] of category.rules.entries()) {

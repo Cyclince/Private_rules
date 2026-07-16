@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { D1DatabaseAdapter } from '../../src/infrastructure/database/d1/adapter';
 import { SqliteDatabaseAdapter } from '../../src/infrastructure/database/sqlite/adapter';
 import { applySqliteMigrations } from '../../src/infrastructure/database/sqlite/migrations';
-import { addRule, createCategory, deleteCategory, getRulesData, importRulesData, updateCategory } from '../../src/lib/db';
+import { addRule, createCategory, deleteCategory, getBackupData, getRulesData, importRulesData, insertRule, updateCategory } from '../../src/lib/db';
 import type { Env } from '../../src/types';
 import type { DatabasePort } from '../../src/application/ports/database';
 
@@ -30,6 +30,30 @@ function contract(name: string, setup: () => Promise<{ database: DatabasePort; c
       const restored = await importRulesData(env, backup);
       expect(restored.categories[0].rules[0].value).toBe('example.com');
       expect(restored.meta?.ruleTokenConfigured).toBe(true);
+    });
+    it('keeps custom rules and source configuration in compact backups', async () => {
+      let data = await createCategory(env, { name: `${name}-compact-backup`, sourceUrls: ['https://example.com/rules.list'], geositeNames: ['telegram'], geoipNames: ['telegram'], syncIntervalMinutes: 360, userAgent: 'Clash' });
+      const category = data.categories.find((item) => item.name === `${name}-compact-backup`)!;
+      data = await addRule(env, category.id, { value: 'custom.example' });
+      const source = data.categories.find((item) => item.id === category.id)!.sources!.find((item) => item.sourceType === 'url')!;
+      const timestamp = new Date().toISOString();
+      await insertRule(env, category.id, { id: `${name}-mirrored-rule`, categoryId: category.id, value: 'upstream.example', type: 'DOMAIN-SUFFIX', enabled: true, sourceId: source.id, createdAt: timestamp, updatedAt: timestamp }, 1, source.id);
+
+      const full = await getRulesData(env);
+      const backup = await getBackupData(env);
+      const backedUpCategory = backup.categories.find((item) => item.id === category.id)!;
+      expect(backedUpCategory.rules.map((rule) => rule.value)).toEqual(['custom.example']);
+      expect(backedUpCategory.sources?.find((item) => item.sourceType === 'url')).toEqual({ url: 'https://example.com/rules.list', enabled: true, syncIntervalMinutes: 360, userAgent: 'Clash', sourceType: 'url' });
+      expect(backedUpCategory.sources?.find((item) => item.sourceType === 'geosite')).toEqual({ geositeName: 'telegram', enabled: true, syncIntervalMinutes: 360, sourceType: 'geosite' });
+      expect(backedUpCategory.sources?.find((item) => item.sourceType === 'geoip')).toEqual({ geoipName: 'telegram', enabled: true, syncIntervalMinutes: 360, sourceType: 'geoip' });
+      expect(JSON.stringify(backup).length).toBeLessThan(JSON.stringify(full).length);
+
+      const restored = await importRulesData(env, backup);
+      const restoredCategory = restored.categories.find((item) => item.id === category.id)!;
+      expect(restoredCategory.rules.map((rule) => rule.value)).toEqual(['custom.example']);
+      expect(restoredCategory.sources?.find((item) => item.sourceType === 'url')).toMatchObject({ url: 'https://example.com/rules.list', lastStatus: 'pending', lastCount: 0 });
+      expect(restoredCategory.sources?.find((item) => item.sourceType === 'geosite')).toMatchObject({ geositeName: 'telegram', url: 'https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/telegram' });
+      expect(restoredCategory.sources?.find((item) => item.sourceType === 'geoip')).toMatchObject({ geoipName: 'telegram', url: 'https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/telegram.txt' });
     });
     it('rolls back a failed batch atomically', async () => {
       const timestamp = new Date().toISOString();

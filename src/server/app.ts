@@ -9,6 +9,7 @@ import {
   createCategory,
   deleteCategory,
   deleteRule,
+  getBackupData,
   getRulesData,
   importRulesData,
   insertRule,
@@ -227,7 +228,7 @@ app.post('/api/categories/:id/sync', requireAuth, async (c) => {
   return json({ results, ...withLinks(c, await getRulesData(c.env)) });
 });
 
-app.get('/api/data', requireAuth, async (c) => json(await getRulesData(c.env)));
+app.get('/api/data', requireAuth, async (c) => json(await getBackupData(c.env)));
 
 app.put('/api/data', requireAuth, async (c) => {
   const data = await c.req.json().catch(() => null);
