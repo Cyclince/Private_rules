@@ -257,13 +257,15 @@ Fork 用户可以同步上游仓库后重新部署，D1 中的规则不会因前
 pnpm db:migrate:remote
 ```
 
-## Stars
+## Star History
 
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Cyclince%2FPrivate_rules&type=Date)](https://www.star-history.com/#Cyclince/Private_rules&Date)
-
-</div>
+<a href="https://www.star-history.com/?repos=Cyclince%2FPrivate-rules&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Cyclince/Private-rules&type=date&theme=dark&legend=top-left&sealed_token=GTq36Pj9JxMOvAY9cUcxN44LKyjX6YrMBtQsHqnSy0kYo6YdkjGTxA9L7cYAWDz3tQikm9ATof0v1g6CkZL_qN28WNc007YskXChEYq87yFLUROyNRT8EwqvszzCTRiFi330rMvVh0XPS7HOSw60mAb3OswRyX6Y3IPU7ERYNrmRYDBzYUKejMPL4aPG" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Cyclince/Private-rules&type=date&legend=top-left&sealed_token=GTq36Pj9JxMOvAY9cUcxN44LKyjX6YrMBtQsHqnSy0kYo6YdkjGTxA9L7cYAWDz3tQikm9ATof0v1g6CkZL_qN28WNc007YskXChEYq87yFLUROyNRT8EwqvszzCTRiFi330rMvVh0XPS7HOSw60mAb3OswRyX6Y3IPU7ERYNrmRYDBzYUKejMPL4aPG" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Cyclince/Private-rules&type=date&legend=top-left&sealed_token=GTq36Pj9JxMOvAY9cUcxN44LKyjX6YrMBtQsHqnSy0kYo6YdkjGTxA9L7cYAWDz3tQikm9ATof0v1g6CkZL_qN28WNc007YskXChEYq87yFLUROyNRT8EwqvszzCTRiFi330rMvVh0XPS7HOSw60mAb3OswRyX6Y3IPU7ERYNrmRYDBzYUKejMPL4aPG" />
+ </picture>
+</a>
 
 ## 技术栈
 
